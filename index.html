@@ -230,6 +230,7 @@ let fbDb = null;
 let fbUser = null;
 let fbReady = false;
 let fbUnsubscribe = null;
+let fbInitialLoaded = false;
 
 try{
   firebase.initializeApp(firebaseConfig);
@@ -249,27 +250,41 @@ try{
     console.log('🔥 Firebase user:', user.uid, '| name:', user.displayName || '(нет)');
     hideLoginOverlay();
 
-    if(fbUnsubscribe) fbUnsubscribe();
     fbUnsubscribe = fbDb.collection('users').doc(user.uid).onSnapshot(
       (doc) => {
         if(doc.exists){
           const cloud = doc.data();
           if(cloud && cloud.data){
             const cloudUpdated = cloud.updatedAt ? cloud.updatedAt.toMillis() : 0;
+            // ПЕРВЫЙ раз — всегда берём облако, что бы ни было локально
+            if(!fbInitialLoaded){
+              fbInitialLoaded = true;
+              state = migrate(cloud.data);
+              state._lastUpdated = cloudUpdated || Date.now();
+              localStorage.setItem(LS_KEY, JSON.stringify(state));
+              renderAll();
+              console.log('☁️ Загружено из облака (первый раз)');
+              return;
+            }
+            // Дальше — только если облако свежее
             const localUpdated = state._lastUpdated || 0;
             if(cloudUpdated >= localUpdated){
               state = migrate(cloud.data);
               state._lastUpdated = cloudUpdated;
               localStorage.setItem(LS_KEY, JSON.stringify(state));
               renderAll();
-              console.log('☁️ Загружено из облака');
+              console.log('☁️ Обновление из облака');
             }
           }
+        } else {
+          // Облако пустое — разрешаем запись
+          fbInitialLoaded = true;
+          console.log('☁️ Облако пустое — пишу локальные');
+          saveState();
         }
       },
       (err) => console.warn('Firestore listen error:', err)
     );
-  });
 }catch(e){
   console.warn(' init failed', e);
 }
@@ -338,7 +353,7 @@ function saveState(){
     localStorage.setItem(LS_KEY, JSON.stringify(state));
     if(syncChannel) syncChannel.postMessage({ type:'update', payload: state });
     // → Firebase: пишем в облако
-    if(fbReady && fbUser && fbDb){
+    if(fbReady && fbUser && fbDb && fbInitialLoaded){
       fbDb.collection('users').doc(fbUser.uid).set({
         data: state,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
