@@ -227,23 +227,48 @@ let fbAuth = null;
 let fbDb = null;
 let fbUser = null;
 let fbReady = false;
+let fbUnsubscribe = null;
 
 try{
   firebase.initializeApp(firebaseConfig);
   fbAuth = firebase.auth();
   fbDb = firebase.firestore();
-  fbAuth.onAuthStateChanged(async (user) => {
-    if(!user){
-      try{ await fbAuth.signInAnonymously(); }
-      catch(e){ console.warn('auth error', e); }
-    } else {
-      fbUser = user;
-      fbReady = true;
-      console.log('🔥 Firebase user:', user.uid);
-    }
-  });
+
+fbAuth.onAuthStateChanged(async (user) => {
+  if(!user){
+    try{ await fbAuth.signInAnonymously(); }
+    catch(e){ console.warn('auth error', e); }
+  } else {
+    fbUser = user;
+    fbReady = true;
+    console.log('🔥 Firebase user:', user.uid);
+
+    // Слушаем свой документ в Firestore
+    if(fbUnsubscribe) fbUnsubscribe();
+    fbUnsubscribe = fbDb.collection('users').doc(user.uid).onSnapshot(
+      (doc) => {
+        if(doc.exists){
+          const cloud = doc.data();
+          if(cloud && cloud.data){
+            const cloudUpdated = cloud.updatedAt ? cloud.updatedAt.toMillis() : 0;
+            const localUpdated = state._lastUpdated || 0;
+            // Берём облако, если оно свежее
+            if(cloudUpdated >= localUpdated){
+              state = migrate(cloud.data);
+              state._lastUpdated = cloudUpdated;
+              localStorage.setItem(LS_KEY, JSON.stringify(state));
+              renderAll();
+              console.log('☁️ Загружено из облака');
+            }
+          }
+        }
+      },
+      (err) => console.warn('Firestore listen error:', err)
+    );
+  }
+});
 }catch(e){
-  console.warn('Firebase init failed', e);
+  console.warn(' init failed', e);
 }
 
   const LS_KEY = 'debt_standup_tracker_v5';
@@ -306,6 +331,7 @@ function loadState(){
 }
 function saveState(){
   try{
+    state._lastUpdated = Date.now();   // ← ЭТУ СТРОКУ ДОБАВИТЬ
     localStorage.setItem(LS_KEY, JSON.stringify(state));
     if(syncChannel) syncChannel.postMessage({ type:'update', payload: state });
     // → Firebase: пишем в облако
