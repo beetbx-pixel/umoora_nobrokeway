@@ -163,6 +163,7 @@
   <div class="actions">
     <button class="icon-btn" id="themeBtn" title="Тема">☀️</button>
     <button class="icon-btn" id="exportBtn" title="Экспорт JSON">⬇️</button>
+    <button class="icon-btn" onclick="alert('fb: ' + typeof firebase + ' | ready: ' + (typeof fbReady!=='undefined'?fbReady:'no') + ' | user: ' + (typeof fbUser!=='undefined'&&fbUser?fbUser.uid:'no'))" title="Debug">🐞</button>
     <button class="icon-btn" id="csvBtn" title="Экспорт CSV">📊</button>
     <button class="icon-btn" id="importBtn" title="Импорт">⬆️</button>
     <input type="file" id="importFile" accept="application/json" hidden>
