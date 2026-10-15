@@ -1,0 +1,1806 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<title>Долги + Стендап — трекер</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+  :root{
+    --bg:#f1f5f9; --card:#fff; --text:#0f172a; --muted:#64748b; --border:#e2e8f0;
+    --p1:#2563eb; --p2:#16a34a; --p3:#dc2626; --p4:#d97706; --p5:#7c3aed;
+    --shadow:0 1px 2px rgba(15,23,42,.06),0 4px 14px rgba(15,23,42,.05);
+    --radius:14px;
+  }
+  [data-theme="dark"]{
+    --bg:#0b1220; --card:#131c2e; --text:#e2e8f0; --muted:#94a3b8; --border:#1e293b;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.3);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.45;-webkit-font-smoothing:antialiased;padding-bottom:2rem}
+  .topbar{position:sticky;top:0;z-index:50;display:flex;align-items:center;justify-content:space-between;padding:.7rem 1rem;background:var(--card);border-bottom:1px solid var(--border);backdrop-filter:saturate(180%) blur(8px)}
+  .brand{font-weight:700;font-size:1rem;letter-spacing:-.01em}
+  .actions{display:flex;gap:.4rem;flex-wrap:wrap}
+  .icon-btn{background:transparent;border:1px solid var(--border);color:var(--text);width:36px;height:36px;border-radius:10px;cursor:pointer;font-size:1rem;display:inline-flex;align-items:center;justify-content:center;transition:.15s}
+  .icon-btn:hover{background:var(--bg)}
+  .tabs{position:sticky;top:57px;z-index:40;display:flex;gap:.25rem;overflow-x:auto;padding:.5rem .75rem;background:var(--bg);border-bottom:1px solid var(--border);scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{background:transparent;border:none;color:var(--muted);padding:.5rem .85rem;border-radius:999px;cursor:pointer;font-size:.9rem;font-weight:600;white-space:nowrap;transition:.15s}
+  .tab.active{background:var(--p1);color:#fff}
+  .container{max-width:820px;margin:0 auto;padding:1rem}
+  .panel{display:none}.panel.active{display:block;animation:fade .2s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:1.1rem;margin-bottom:1rem;border:1px solid var(--border)}
+  h3{margin:0 0 .7rem;font-size:1rem;letter-spacing:-.01em}
+  .muted{color:var(--muted);font-size:.9rem}.muted.small{font-size:.8rem}
+  .hero{background:linear-gradient(135deg,var(--p1),var(--p5));color:#fff;border:none}
+  .hero-label{opacity:.85;font-size:.85rem}
+  .hero-value{font-size:2.1rem;font-weight:800;letter-spacing:-.02em;margin:.15rem 0}
+  .hero-sub{opacity:.85;font-size:.85rem;margin-bottom:.7rem}
+  .hero .progress{background:rgba(255,255,255,.25)}
+  .hero .progress-fill{background:#fff!important}
+  .progress{height:9px;border-radius:6px;background:var(--border);overflow:hidden}
+  .progress-fill{height:100%;border-radius:6px;transition:width .35s ease}
+  .stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:.6rem;margin-bottom:1rem}
+  .stat{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:.85rem;text-align:center}
+  .stat-num{font-size:1.15rem;font-weight:800;letter-spacing:-.01em}
+  .stat-lbl{font-size:.75rem;color:var(--muted);margin-top:.15rem}
+  .alert{display:flex;gap:.8rem;align-items:center;border-left:4px solid var(--p4);background:#fffbeb}
+  [data-theme="dark"] .alert{background:#2a1f0a}
+  .alert-icon{font-size:1.4rem}
+  .alert-title{font-weight:700;font-size:.95rem}
+  .alert-sub{color:var(--muted);font-size:.85rem}
+  .alert.risk{border-left-color:var(--p3);background:#fef2f2}
+  [data-theme="dark"] .alert.risk{background:#2a0a0a}
+  .chart{width:100%;height:150px;display:block;margin-top:.6rem}
+  .debt{padding:.85rem 0;border-bottom:1px solid var(--border)}
+  .debt:last-child{border-bottom:none}
+  .debt-head{display:flex;justify-content:space-between;align-items:baseline;gap:.6rem}
+  .debt-name{font-weight:700}
+  .debt-amt{font-weight:700}
+  .debt-meta{display:flex;gap:.6rem;flex-wrap:wrap;font-size:.78rem;color:var(--muted);margin:.2rem 0 .4rem}
+  .chip{background:var(--bg);border:1px solid var(--border);padding:.1rem .5rem;border-radius:999px}
+  .debt.closed{opacity:.5}
+  .debt.closed .debt-name{text-decoration:line-through}
+  .row{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+  .btn{border:none;border-radius:10px;padding:.55rem .9rem;cursor:pointer;font-size:.9rem;font-weight:600;transition:.15s;font-family:inherit}
+  .btn.primary{background:var(--p1);color:#fff}.btn.primary:hover{filter:brightness(1.08)}
+  .btn.success{background:var(--p2);color:#fff}
+  .btn.warn{background:var(--p4);color:#fff}
+  .btn.danger{background:var(--p3);color:#fff}
+  .btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
+  .btn.ghost:hover{background:var(--bg)}
+  .btn.sm{padding:.35rem .65rem;font-size:.8rem}
+  .cal-item{display:flex;gap:.8rem;align-items:center;padding:.7rem .85rem;border-radius:10px;margin-bottom:.5rem;border:1px solid var(--border);background:var(--bg)}
+  .cal-item.today{border-color:var(--p3);background:#fef2f2}
+  [data-theme="dark"] .cal-item.today{background:#2a0a0a}
+  .cal-date{min-width:52px;text-align:center;border-radius:8px;color:#fff;padding:.35rem 0;font-weight:700;line-height:1.1}
+  .cal-date .d{font-size:1.1rem}.cal-date .m{font-size:.7rem;opacity:.85}
+  .cal-body{flex:1}.cal-title{font-weight:600;font-size:.9rem}.cal-sub{font-size:.78rem;color:var(--muted)}
+  .c-statement{background:var(--p1)}.c-payment{background:var(--p4)}
+  .c-reminder{background:var(--p5)}.c-risk{background:linear-gradient(135deg,var(--p3),var(--p4))}
+  label{display:block;font-size:.8rem;color:var(--muted);margin:.55rem 0 .25rem;font-weight:600}
+  input,textarea,select{width:100%;padding:.6rem .75rem;border:1px solid var(--border);border-radius:10px;background:var(--card);color:var(--text);font-family:inherit;font-size:.95rem}
+  input:focus,textarea:focus,select:focus{outline:2px solid var(--p1);outline-offset:-1px;border-color:var(--p1)}
+  textarea{min-height:80px;resize:vertical}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem}
+  input[type=range]{padding:0}
+  .week-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:.3rem;text-align:center;font-size:.72rem}
+  .week-cell{padding:.55rem .2rem;border-radius:8px;color:#fff;font-weight:600;line-height:1.25}
+  .day-barista{background:#334155}.day-standup{background:var(--p2)}.day-rest{background:var(--p1)}.day-neuro{background:var(--p5)}
+  .check{display:flex;align-items:center;gap:.55rem;padding:.4rem 0;font-size:.92rem;cursor:pointer}
+  .check input{width:auto;transform:scale(1.15)}
+  .note{padding:.8rem;border:1px solid var(--border);border-radius:10px;margin-bottom:.6rem;background:var(--bg)}
+  .note-title{font-weight:700;font-size:.95rem}
+  .note-meta{font-size:.75rem;color:var(--muted);margin-bottom:.35rem}
+  .note-text{font-size:.9rem;white-space:pre-wrap}
+  .tag{display:inline-block;background:var(--card);border:1px solid var(--border);padding:.1rem .45rem;border-radius:999px;font-size:.7rem;margin-right:.25rem;margin-top:.35rem;cursor:pointer}
+  .tag.active{background:var(--p1);color:#fff;border-color:var(--p1)}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:1rem;z-index:100}
+  .modal.hidden{display:none}
+  .modal-card{background:var(--card);border-radius:16px;width:100%;max-width:480px;box-shadow:0 20px 60px rgba(0,0,0,.5);overflow:hidden;max-height:90vh;display:flex;flex-direction:column}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;padding:1rem 1.1rem;border-bottom:1px solid var(--border)}
+  .modal-title{font-weight:700}
+  .modal-body{padding:1rem 1.1rem;overflow-y:auto}
+  .modal-foot{display:flex;gap:.5rem;justify-content:flex-end;padding:.9rem 1.1rem;border-top:1px solid var(--border)}
+  .toast{position:fixed;left:50%;bottom:1.2rem;transform:translateX(-50%) translateY(120%);background:#0f172a;color:#fff;padding:.7rem 1.1rem;border-radius:999px;font-size:.88rem;font-weight:600;z-index:200;transition:transform .3s ease;box-shadow:0 10px 30px rgba(0,0,0,.25);max-width:90vw}
+  .toast.show{transform:translateX(-50%) translateY(0)}
+  .toast.err{background:var(--p3)}.toast.ok{background:var(--p2)}
+  .churn-box{background:var(--bg);border:1px dashed var(--p5);border-radius:10px;padding:.75rem;margin-top:.7rem}
+  .churn-schedule{display:grid;grid-template-columns:repeat(auto-fill,minmax(95px,1fr));gap:.4rem;margin-top:.5rem}
+  .churn-day{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:.4rem;text-align:center;font-size:.78rem}
+  .churn-day .d{font-weight:700;font-size:.9rem}
+  .churn-day .c{color:var(--p5);font-weight:700}
+  .churn-banner{background:var(--card);border-left:4px solid var(--p5);border-radius:10px;padding:.7rem .9rem;margin-bottom:1rem;display:flex;gap:.7rem;align-items:center}
+  .drop-zone{border:2px dashed var(--p5);border-radius:12px;padding:1.5rem 1rem;text-align:center;background:var(--bg);cursor:pointer;transition:.15s;margin-bottom:.8rem}
+  .drop-zone:hover,.drop-zone.over{border-color:var(--p1);background:rgba(37,99,235,.05)}
+  .drop-zone .ico{font-size:2.2rem;margin-bottom:.3rem}
+  .drop-zone .t{font-weight:700}
+  .drop-zone .s{font-size:.8rem;color:var(--muted)}
+  .screen-card{display:flex;gap:.7rem;align-items:center;padding:.6rem;border:1px solid var(--border);border-radius:10px;margin-bottom:.5rem;background:var(--bg)}
+  .screen-thumb{width:60px;height:60px;border-radius:8px;object-fit:cover;flex-shrink:0;border:1px solid var(--border);background:var(--card)}
+  .screen-info{flex:1;min-width:0}
+  .screen-info .t{font-weight:700;font-size:.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .screen-info .s{font-size:.75rem;color:var(--muted)}
+  .ocr-preview{background:var(--bg);border-radius:10px;padding:.7rem;margin-top:.7rem;max-height:260px;overflow-y:auto;font-family:ui-monospace,monospace;font-size:.8rem;white-space:pre-wrap;border:1px solid var(--border)}
+  .ocr-raw{color:var(--muted);font-size:.75rem}
+  .parsed-row{display:flex;gap:.5rem;align-items:center;padding:.55rem;border:1px solid var(--border);border-radius:10px;margin-bottom:.5rem;background:var(--card)}
+  .parsed-row select,.parsed-row input{padding:.35rem .5rem;font-size:.85rem}
+  .parsed-row .amt{width:110px;text-align:right;font-weight:700}
+  .balance-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.6rem}
+  .balance-card{padding:.7rem;border:1px solid var(--border);border-radius:10px;background:var(--card)}
+  .balance-card .n{font-size:.78rem;color:var(--muted);margin-bottom:.2rem}
+  .balance-card .v{font-size:1.1rem;font-weight:800}
+  .balance-card .d{font-size:.7rem;color:var(--muted);margin-top:.2rem}
+  .spend-cat{display:inline-block;padding:.1rem .5rem;border-radius:999px;font-size:.7rem;font-weight:600}
+  .cat-food{background:#dcfce7;color:#166534}
+  .cat-transport{background:#dbeafe;color:#1e40af}
+  .cat-phone{background:#ede9fe;color:#5b21b6}
+  .cat-home{background:#fef3c7;color:#92400e}
+  .cat-standup{background:#fce7f3;color:#9d174d}
+  .cat-other{background:#e2e8f0;color:#334155}
+  [data-theme="dark"] .cat-food{background:#14532d;color:#86efac}
+  [data-theme="dark"] .cat-transport{background:#1e3a8a;color:#93c5fd}
+  [data-theme="dark"] .cat-phone{background:#4c1d95;color:#c4b5fd}
+  [data-theme="dark"] .cat-home{background:#78350f;color:#fcd34d}
+  [data-theme="dark"] .cat-standup{background:#831843;color:#f9a8d4}
+  [data-theme="dark"] .cat-other{background:#1e293b;color:#cbd5e1}
+  .spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--p1);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:.4rem}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @media (max-width:480px){.stats-grid{grid-template-columns:repeat(2,1fr)}.hero-value{font-size:1.7rem}}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">💰 Долги · 🎤 Стендап · 🧠 Нейро</div>
+  <div class="actions">
+    <button class="icon-btn" id="themeBtn" title="Тема">☀️</button>
+    <button class="icon-btn" id="exportBtn" title="Экспорт JSON">⬇️</button>
+    <button class="icon-btn" id="csvBtn" title="Экспорт CSV">📊</button>
+    <button class="icon-btn" id="importBtn" title="Импорт">⬆️</button>
+    <input type="file" id="importFile" accept="application/json" hidden>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button class="tab active" data-tab="overview">Обзор</button>
+  <button class="tab" data-tab="debts">Долги</button>
+  <button class="tab" data-tab="calendar">Календарь</button>
+  <button class="tab" data-tab="income">Доход</button>
+  <button class="tab" data-tab="standup">Стендап</button>
+  <button class="tab" data-tab="screens">Скрины</button>
+  <button class="tab" data-tab="notes">Заметки</button>
+</nav>
+
+<main class="container">
+  <section class="panel active" id="panel-overview"></section>
+  <section class="panel" id="panel-debts"></section>
+  <section class="panel" id="panel-calendar"></section>
+  <section class="panel" id="panel-income"></section>
+  <section class="panel" id="panel-standup"></section>
+  <section class="panel" id="panel-screens"></section>
+  <section class="panel" id="panel-notes"></section>
+</main>
+
+<div class="modal hidden" id="modal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div class="modal-title" id="modalTitle"></div>
+      <button class="icon-btn" type="button" onclick="closeModal()">✕</button>
+    </div>
+    <form id="modalForm">
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-foot">
+        <button type="button" class="btn ghost" onclick="closeModal()">Отмена</button>
+        <button type="submit" class="btn primary" id="modalSubmit">Сохранить</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   STATE
+============================================================ */
+const LS_KEY = 'debt_standup_tracker_v5';
+
+const DEFAULT_STATE = {
+  version: 5,
+  debts: [
+    { id:'lawyers', name:'Юристы (через друга)', initial:47000, current:47000, rate:0, minPayment:0, dueDay:null, statementDay:null, priority:1, color:'#dc2626', note:'Не затягивать — отношения' },
+    { id:'cc400',   name:'Кредитка 400к (+16к)', initial:416000, current:416000, rate:0, minPayment:0, dueDay:26, statementDay:2, priority:2, color:'#2563eb', note:'Грейс: выписка 2-го, закрыть до 26-го. В этом цикле цель = 416к',
+      churn: { enabled:true, coveredAmount:0, rounds:[], cycleStart:null, avgRound:50000 } },
+    { id:'loan',    name:'Кредит наличными 40%', initial:50000, current:50000, rate:40, minPayment:1938, dueDay:21, statementDay:null, priority:3, color:'#b91c1c', note:'Осталось 55 платежей, платёж 21-го (перенесён с 16-го)' },
+    { id:'cc255',   name:'Кредитка 255к',        initial:255000, current:255000, rate:0, minPayment:0, dueDay:11, statementDay:16, priority:4, color:'#f59e0b', note:'Мин. платёж 11-го (перенесён с 9-го)',
+      churn: { enabled:true, coveredAmount:0, rounds:[], cycleStart:null, avgRound:50000 } },
+    { id:'father',  name:'Отец',                 initial:50000, current:50000, rate:0, minPayment:0, dueDay:null, statementDay:null, priority:5, color:'#6366f1', note:'Последним' }
+  ],
+  oneTime: [
+    { id:'deposit',  name:'Залог за квартиру (1/2)', amount:35000 },
+    { id:'deposit2', name:'Залог за квартиру (2/2)', amount:35000 }
+  ],
+  payments: [],
+  shifts: [],
+  notes: [],
+  balances: {},
+  spends: [],
+  screens: [],
+  standup: { openMics: {}, materialMinutes: 0 },
+  budget: {
+    monthlyIncome: 88000,
+    expenses: [
+      { id:'rent',      name:'Аренда (доля 50/50)', amount:22000 },
+      { id:'food',      name:'Еда',                 amount:12000 },
+      { id:'transport', name:'Транспорт',           amount:3000  },
+      { id:'phone',     name:'Связь/подписки',      amount:2000  },
+      { id:'home',      name:'Быт/прочее',          amount:3000  },
+      { id:'standup',   name:'Стендап (дорога 130₽)', amount:2000 },
+      { id:'cushion',   name:'Подушка',             amount:5000  }
+    ]
+  },
+  settings: {
+    theme: 'dark',
+    strategy: 'avalanche',
+    maxLifeBudget: 40000,
+    salaryDays: [10, 20],
+    reminderLeadDays: 5
+  }
+};
+
+let state = loadState();
+let notesQuery = '';
+let notesTag = '';
+
+/* ============================================================
+   STORAGE + SYNC
+============================================================ */
+function loadState(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(raw) return migrate(JSON.parse(raw));
+  }catch(e){ console.warn(e); }
+  return structuredClone(DEFAULT_STATE);
+}
+function saveState(){
+  try{
+    localStorage.setItem(LS_KEY, JSON.stringify(state));
+    if(syncChannel) syncChannel.postMessage({ type:'update', payload: state });
+  }catch(e){ console.warn(e); }
+}
+function migrate(s){
+  const d = structuredClone(DEFAULT_STATE);
+  const out = { ...d, ...s };
+  out.budget   = { ...d.budget,   ...(s.budget   || {}) };
+  out.settings = { ...d.settings, ...(s.settings || {}) };
+  out.standup  = { ...d.standup,  ...(s.standup  || {}) };
+  ['debts','payments','shifts','notes','oneTime','spends','screens'].forEach(k=>{ if(!Array.isArray(out[k])) out[k] = d[k] || []; });
+  if(typeof out.balances !== 'object' || !out.balances) out.balances = {};
+  ['cc400','cc255'].forEach(id=>{
+    const dd = out.debts.find(x=>x.id===id);
+    if(dd && !dd.churn) dd.churn = { enabled:true, coveredAmount:0, rounds:[], cycleStart:null, avgRound:50000 };
+  });
+  return out;
+}
+
+let syncChannel = null;
+if('BroadcastChannel' in window){
+  syncChannel = new BroadcastChannel('debt_tracker_sync');
+  syncChannel.onmessage = e => {
+    if(e.data?.type === 'update'){
+      state = migrate(e.data.payload);
+      renderAll();
+    }
+  };
+}
+
+/* ============================================================
+   INDEXEDDB для скринов
+============================================================ */
+const IDB_NAME = 'debt_tracker_images';
+const IDB_STORE = 'screens';
+
+function idbOpen(){
+  return new Promise((res, rej)=>{
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if(!db.objectStoreNames.contains(IDB_STORE)){
+        db.createObjectStore(IDB_STORE, { keyPath:'id' });
+      }
+    };
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+  });
+}
+async function idbPut(rec){
+  const db = await idbOpen();
+  return new Promise((res, rej)=>{
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(rec);
+    tx.oncomplete = () => res(rec.id);
+    tx.onerror = () => rej(tx.error);
+  });
+}
+async function idbGet(id){
+  const db = await idbOpen();
+  return new Promise((res, rej)=>{
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).get(id);
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+  });
+}
+async function idbDelete(id){
+  const db = await idbOpen();
+  return new Promise((res, rej)=>{
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).delete(id);
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+
+/* ============================================================
+   OCR PARSER
+============================================================ */
+function parseOCRText(text){
+  const result = { balances: [], spends: [] };
+  if(!text) return result;
+  const lines = text.split(/\n+/).map(l=>l.trim()).filter(Boolean);
+
+  const balanceRx = /(?:доступно|баланс|остаток|итого|к оплате)[^\d]{0,20}([\d\s]{3,15}[.,]?\d{0,2})\s*(?:₽|руб|р\.)/i;
+  const spendRx   = /[-−]\s*([\d\s]{2,12}[.,]?\d{0,2})\s*(?:₽|руб|р\.)/;
+  const incomeRx  = /[+]\s*([\d\s]{2,12}[.,]?\d{0,2})\s*(?:₽|руб|р\.)/;
+
+  const cardKeywords = [
+    { id:'cc400',   keys:['400','416','тин','tinkoff'] },
+    { id:'cc255',   keys:['255','тин','tinkoff'] },
+    { id:'loan',    keys:['кредит','наличн','40%'] },
+    { id:'lawyers', keys:['юрист','друг'] },
+    { id:'father',  keys:['отец','папа'] }
+  ];
+
+  for(const line of lines){
+    const bm = line.match(balanceRx);
+    if(bm){
+      const amount = parseFloat(bm[1].replace(/\s/g,'').replace(',','.'));
+      if(!isNaN(amount) && amount > 100){
+        const lower = line.toLowerCase();
+        let matched = null;
+        for(const ck of cardKeywords){
+          if(ck.keys.some(k => lower.includes(k))){ matched = ck.id; break; }
+        }
+        result.balances.push({ cardName: line, amount, matchedDebtId: matched });
+      }
+    }
+    const sm = line.match(spendRx);
+    if(sm){
+      const amount = -parseFloat(sm[1].replace(/\s/g,'').replace(',','.'));
+      if(!isNaN(amount) && Math.abs(amount) > 1){
+        result.spends.push({
+          amount,
+          merchant: line.replace(spendRx,'').trim().slice(0,60),
+          category: guessCategory(line)
+        });
+      }
+    }
+    const im = line.match(incomeRx);
+    if(im){
+      const amount = parseFloat(im[1].replace(/\s/g,'').replace(',','.'));
+      if(!isNaN(amount) && amount > 1){
+        result.spends.push({
+          amount,
+          merchant: line.replace(incomeRx,'').trim().slice(0,60),
+          category: 'other'
+        });
+      }
+    }
+  }
+  return result;
+}
+
+function guessCategory(text){
+  const t = text.toLowerCase();
+  if(/пятёроч|магнит|перекрёст|лента|вкусвилл|ашан|еда|кафе|кофе|ресторан|kfc|burger|mcd/i.test(t)) return 'food';
+  if(/метро|автобус|такси|яндекс.?go|транспорт|бензин|заправк/i.test(t)) return 'transport';
+  if(/мтс|билайн|мегафон|теле2|подписка|spotify|apple|youtube/i.test(t)) return 'phone';
+  if(/аренда|квартир|жкх|коммунал|залог/i.test(t)) return 'home';
+  if(/стендап|опен.?мик|комик|концерт/i.test(t)) return 'standup';
+  return 'other';
+}
+
+function categoryLabel(cat){
+  return { food:'🍔 Еда', transport:'🚕 Транспорт', phone:'📱 Связь',
+    home:'🏠 Быт', standup:'🎤 Стендап', other:'📦 Прочее' }[cat] || '📦 Прочее';
+}
+
+/* ============================================================
+   UTILS
+============================================================ */
+const $  = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt  = n => Math.round(n).toLocaleString('ru-RU') + ' ₽';
+const fmtN = n => Math.round(n).toLocaleString('ru-RU');
+const fmtDate = d => new Date(d).toLocaleDateString('ru-RU',{day:'numeric',month:'short',year:'numeric'});
+const fmtDay  = d => new Date(d).toLocaleDateString('ru-RU',{day:'numeric',month:'short'});
+const today = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
+const addMonths = (d,n) => { const x = new Date(d); x.setMonth(x.getMonth()+n); return x; };
+const daysUntil = d => Math.round((new Date(d) - today()) / 86400000);
+const plural = (n,a,b,c) => { const m10=n%10, m100=n%100;
+  if(m10===1 && m100!==11) return a;
+  if(m10>=2 && m10<=4 && (m100<10||m100>=20)) return b;
+  return c;
+};
+function monthsToText(m){
+  if(!isFinite(m) || m >= 1200) return '∞';
+  const y = Math.floor(m/12), mo = m%12;
+  let s = '';
+  if(y) s += y + ' ' + plural(y,'год','года','лет');
+  if(mo) s += (s?' ':'') + mo + ' ' + plural(mo,'мес.','мес.','мес.');
+  return s || '0 мес.';
+}
+function getWeekKey(d = new Date()){
+  const date = new Date(d); date.setHours(0,0,0,0);
+  date.setDate(date.getDate() + 3 - (date.getDay()+6) % 7);
+  const week1 = new Date(date.getFullYear(), 0, 4);
+  const week = 1 + Math.round(((date - week1)/86400000 - 3 + (week1.getDay()+6)%7)/7);
+  return `${date.getFullYear()}-W${week}`;
+}
+function toast(msg, type='ok'){
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.className = 'toast', 2400);
+}
+
+/* ============================================================
+   CALCULATIONS
+============================================================ */
+const totalCurrent = () => state.debts.reduce((s,d)=>s+d.current,0);
+const totalInitial = () => state.debts.reduce((s,d)=>s+d.initial,0);
+const totalPaid    = () => Math.max(0, totalInitial() - totalCurrent());
+const monthlyExpenses = () => state.budget.expenses.reduce((s,e)=>s+Number(e.amount||0),0);
+const monthlyAvailable = () => Math.max(0, state.budget.monthlyIncome - monthlyExpenses());
+const dailyLimit = () => (state.settings.maxLifeBudget || 0) / 30;
+
+function projectSeries(monthlyPayment){
+  let list = state.debts.filter(d=>d.current>0).map(d=>({...d}));
+  const series = [ list.reduce((s,d)=>s+d.current,0) ];
+  let months = 0, interest = 0;
+  const MAX = 600;
+  while(list.length && months < MAX){
+    months++;
+    let budget = monthlyPayment;
+    for(const d of list){
+      const i = d.current * (d.rate/100/12);
+      d.current += i; interest += i;
+    }
+    for(const d of list){
+      if(budget <= 0) break;
+      const pay = Math.min(d.minPayment||0, d.current, budget);
+      d.current -= pay; budget -= pay;
+    }
+    const order = state.settings.strategy === 'snowball'
+      ? [...list].sort((a,b)=>a.current-b.current)
+      : [...list].sort((a,b)=>b.rate-a.rate);
+    for(const d of order){
+      if(budget <= 0) break;
+      const pay = Math.min(d.current, budget);
+      d.current -= pay; budget -= pay;
+    }
+    list = list.filter(d=>d.current>0.5);
+    series.push(list.reduce((s,d)=>s+d.current,0));
+  }
+  return { series, months, interest };
+}
+
+function upcomingEvents(days = 90){
+  const events = [];
+  const start = today();
+  const end = new Date(start); end.setDate(end.getDate()+days);
+  const lead = state.settings.reminderLeadDays || 5;
+
+  state.debts.forEach(d=>{
+    if(d.current <= 0) return;
+    if(d.dueDay){
+      let due = new Date(start.getFullYear(), start.getMonth(), d.dueDay);
+      if(due < start) due.setMonth(due.getMonth()+1);
+      while(due <= end){
+        const rem = new Date(due); rem.setDate(rem.getDate() - lead);
+        if(rem >= start){
+          events.push({ date: new Date(rem), title: `Напоминание: ${d.name} через ${lead} дн.`, cls: 'c-reminder', type:'reminder' });
+        }
+        const dd = daysUntil(due);
+        events.push({
+          date: new Date(due),
+          title: `${d.minPayment ? 'Мин. платёж' : 'Платёж'}: ${d.name}`,
+          cls: dd <= 3 ? 'c-risk' : 'c-payment',
+          type:'payment'
+        });
+        due = new Date(due); due.setMonth(due.getMonth()+1);
+      }
+    }
+    if(d.statementDay){
+      let st = new Date(start.getFullYear(), start.getMonth(), d.statementDay);
+      if(st < start) st.setMonth(st.getMonth()+1);
+      while(st <= end){
+        events.push({ date:new Date(st), title:`Выписка: ${d.name}`, cls:'c-statement', type:'statement' });
+        st = new Date(st); st.setMonth(st.getMonth()+1);
+      }
+    }
+  });
+  return events.sort((a,b)=>a.date-b.date);
+}
+
+/* ============================================================
+   CHURN (прокрутка кредиток)
+============================================================ */
+function daysUntilThisMonth(day){
+  const now = today();
+  let d = new Date(now.getFullYear(), now.getMonth(), day);
+  if(d < now) d.setMonth(d.getMonth() + 1);
+  return Math.round((d - now) / 86400000);
+}
+
+function churnInfo(debt){
+  if(!debt.churn || !debt.churn.enabled) return null;
+  const goal = debt.current;
+  const covered = debt.churn.coveredAmount || 0;
+  const remaining = Math.max(0, goal - covered);
+  const rounds = debt.churn.rounds || [];
+  const avgRound = rounds.length
+    ? rounds.reduce((s,r)=>s+r.amount,0)/rounds.length
+    : (debt.churn.avgRound || 50000);
+  const daysLeft = debt.dueDay ? daysUntilThisMonth(debt.dueDay) : null;
+  const safeDays = daysLeft != null ? Math.max(1, daysLeft - 3) : null;
+  const roundsRemaining = Math.ceil(remaining / Math.max(avgRound,1));
+  const perDayNeeded = safeDays ? roundsRemaining / safeDays : null;
+  const progress = goal ? Math.min(100, covered/goal*100) : 0;
+  return {
+    goal, covered, remaining, rounds, avgRound,
+    daysLeft, safeDays, roundsRemaining, perDayNeeded,
+    progress,
+    cycleStart: debt.churn.cycleStart
+  };
+}
+
+function addChurnRound(debtId){
+  const d = state.debts.find(x=>x.id===debtId);
+  if(!d || !d.churn) return;
+  const info = churnInfo(d);
+  openModal({
+    title: 'Новый круг: ' + d.name,
+    body: `
+      <div class="muted small">Отметь после того, как Озон вернёт деньги.</div>
+      <label>Сумма круга, ₽</label>
+      <input type="number" name="amount" value="${Math.round(info?.avgRound || 50000)}" min="1" required autofocus>
+      <div class="row" style="margin-top:.6rem">
+        <button type="button" class="btn ghost sm" onclick="this.form.amount.value=30000">30к</button>
+        <button type="button" class="btn ghost sm" onclick="this.form.amount.value=50000">50к</button>
+        <button type="button" class="btn ghost sm" onclick="this.form.amount.value=70000">70к</button>
+      </div>
+      <label>Заметка</label>
+      <input name="note" placeholder="Озон, корзина №...">
+    `,
+    submitText: 'Записать круг',
+    onSubmit: data => {
+      const amt = Number(data.amount);
+      if(!amt || amt <= 0) return false;
+      if(!d.churn.rounds) d.churn.rounds = [];
+      d.churn.rounds.push({
+        id: 'c_'+Date.now(),
+        date: new Date().toISOString(),
+        amount: amt,
+        note: data.note || ''
+      });
+      d.churn.coveredAmount = (d.churn.coveredAmount || 0) + amt;
+      if(!d.churn.cycleStart) d.churn.cycleStart = new Date().toISOString();
+      saveState(); renderAll();
+      const ni = churnInfo(d);
+      toast(`Круг ${fmtN(amt)} ₽ · осталось ${fmtN(ni.remaining)} ₽`);
+    }
+  });
+}
+
+function removeChurnRound(debtId, roundId){
+  const d = state.debts.find(x=>x.id===debtId);
+  if(!d || !d.churn) return;
+  const r = (d.churn.rounds||[]).find(x=>x.id===roundId);
+  if(!r) return;
+  if(!confirm(`Удалить круг на ${fmt(r.amount)}?`)) return;
+  d.churn.rounds = d.churn.rounds.filter(x=>x.id!==roundId);
+  d.churn.coveredAmount = Math.max(0, (d.churn.coveredAmount||0) - r.amount);
+  saveState(); renderAll();
+  toast('Круг удалён', 'err');
+}
+
+function resetChurnCycle(debtId){
+  const d = state.debts.find(x=>x.id===debtId);
+  if(!d || !d.churn) return;
+  if(!confirm('Начать новый цикл? Все отметки кругов сбросятся.')) return;
+  d.churn.coveredAmount = 0;
+  d.churn.rounds = [];
+  d.churn.cycleStart = new Date().toISOString();
+  saveState(); renderAll();
+  toast('Цикл обнулён');
+}
+
+function churnSchedule(debt, days = 14){
+  const info = churnInfo(debt);
+  if(!info || !info.safeDays || info.remaining <= 0) return [];
+  const perDay = info.remaining / info.safeDays;
+  const out = [];
+  let acc = 0;
+  for(let i = 0; i < Math.min(info.safeDays, days); i++){
+    const target = Math.round((i+1) * perDay);
+    const amt = target - acc;
+    if(amt > 0){
+      const date = new Date(today()); date.setDate(date.getDate() + i);
+      out.push({ date, amount: amt });
+      acc = target;
+    }
+  }
+  return out;
+}
+
+function renderChurnBlock(d){
+  const i = churnInfo(d);
+  if(!i) return '';
+  const closed = i.remaining <= 0;
+  const roundsList = (i.rounds || []).slice().reverse().slice(0, 6).map(r => `
+    <div class="row" style="justify-content:space-between;padding:.3rem 0;border-bottom:1px solid var(--border)">
+      <span class="muted small">${new Date(r.date).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}${r.note?' · '+esc(r.note):''}</span>
+      <span><b>${fmtN(r.amount)} ₽</b> <button class="btn ghost sm" onclick="removeChurnRound('${d.id}','${r.id}')">✕</button></span>
+    </div>`).join('');
+
+  return `
+    <div class="churn-box">
+      <div class="row" style="justify-content:space-between">
+        <b>🌀 Прокрутка</b>
+        <span class="muted small">${fmtN(i.covered)} / ${fmtN(i.goal)} ₽</span>
+      </div>
+      <div class="progress" style="margin:.4rem 0">
+        <div class="progress-fill" style="width:${i.progress}%;background:var(--p5)"></div>
+      </div>
+      ${closed ? `
+        <div class="muted small" style="color:var(--p2)">✅ Закрыто — грейс обнулён. Отдых до следующей выписки.</div>
+      ` : `
+        <div class="muted small">
+          Осталось: <b>${fmtN(i.remaining)} ₽</b>
+          ${i.avgRound ? ` (~${i.roundsRemaining} ${plural(i.roundsRemaining,'круг','круга','кругов')} по ${fmtN(i.avgRound)} ₽)` : ''}
+        </div>
+        ${i.daysLeft != null ? `
+          <div class="muted small" style="margin-top:.2rem">
+            До дедлайна: <b>${i.daysLeft} ${plural(i.daysLeft,'день','дня','дней')}</b>
+            ${i.perDayNeeded ? ` · ориентир <b style="color:var(--p5)">${i.perDayNeeded.toFixed(1)} кр./день</b>` : ''}
+          </div>` : ''}
+        ${roundsList ? `<div style="margin-top:.5rem">${roundsList}</div>` : ''}
+        <div class="row" style="margin-top:.6rem">
+          <button class="btn primary sm" onclick="addChurnRound('${d.id}')">+ Записать круг</button>
+          <button class="btn ghost sm" onclick="resetChurnCycle('${d.id}')">Новый цикл</button>
+        </div>
+      `}
+    </div>`;
+}
+
+function churnBanner(){
+  const now = new Date();
+  const banners = [];
+  for(const d of state.debts){
+    if(!d.churn || !d.churn.enabled || !d.churn.cycleStart) continue;
+    if(!d.statementDay) continue;
+    const cs = new Date(d.churn.cycleStart);
+    const next = new Date(cs);
+    next.setMonth(next.getMonth() + 1);
+    next.setDate(d.statementDay);
+    if(now >= next && (d.churn.coveredAmount || 0) > 0){
+      banners.push(`
+        <div class="churn-banner">
+          <div style="font-size:1.3rem">🔄</div>
+          <div style="flex:1">
+            <div style="font-weight:700">«${esc(d.name)}» — новая выписка</div>
+            <div class="muted small">Цикл начат ${fmtDate(cs)}. Пора сбросить счётчик кругов.</div>
+          </div>
+          <button class="btn primary sm" onclick="resetChurnCycle('${d.id}')">Сбросить</button>
+        </div>`);
+    }
+  }
+  return banners.join('');
+}
+/* ============================================================
+   RENDER — OVERVIEW
+============================================================ */
+function renderOverview(){
+  const total = totalCurrent();
+  const initial = totalInitial();
+  const paid = initial - total;
+  const pct = initial ? (paid/initial*100) : 0;
+  const avail = monthlyAvailable();
+  const {series, months, interest} = projectSeries(avail);
+  const freeDate = months < 600 ? addMonths(new Date(), months) : null;
+  const next = upcomingEvents(90)[0];
+
+  // Сегодняшние траты
+  const todayStr = new Date().toDateString();
+  const todaySpends = state.spends.filter(s => new Date(s.date).toDateString() === todayStr);
+  const todayTotal = todaySpends.reduce((s,x)=>s+Math.abs(x.amount),0);
+  const overLimit = todayTotal > dailyLimit();
+
+  $('#panel-overview').innerHTML = `
+    <div class="card hero">
+      <div class="hero-label">Общий остаток долга</div>
+      <div class="hero-value">${fmt(total)}</div>
+      <div class="hero-sub">из ${fmt(initial)} · закрыто ${pct.toFixed(1)}%</div>
+      <div class="progress"><div class="progress-fill" style="width:${Math.max(2,pct)}%"></div></div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-num" style="color:var(--p2)">${fmt(paid)}</div><div class="stat-lbl">Выплачено</div></div>
+      <div class="stat"><div class="stat-num" style="color:var(--p1)">${monthsToText(months)}</div><div class="stat-lbl">До нуля</div></div>
+      <div class="stat"><div class="stat-num" style="color:${overLimit?'var(--p3)':'var(--p4)'}">${fmtN(todayTotal)} ₽</div><div class="stat-lbl">Потрачено сегодня</div></div>
+      <div class="stat"><div class="stat-num" style="color:var(--p4)">${fmtN(avail)} ₽</div><div class="stat-lbl">На долги/мес</div></div>
+    </div>
+
+    ${churnBanner()}
+
+    ${next ? (() => {
+      const dd = daysUntil(next.date);
+      const urgent = dd <= 3 && next.type === 'payment';
+      return `
+        <div class="card alert ${urgent?'risk':''}">
+          <div class="alert-icon">${urgent?'🚨':'⏰'}</div>
+          <div>
+            <div class="alert-title">${esc(next.title)}</div>
+            <div class="alert-sub">${fmtDate(next.date)} · ${dd>0?`через ${dd} ${plural(dd,'день','дня','дней')}`:dd===0?'сегодня':'просрочено'}</div>
+          </div>
+        </div>`;
+    })() : ''}
+
+    <div class="card">
+      <h3>Прогноз закрытия</h3>
+      <div class="muted">При <b>${fmt(avail)}</b>/мес на долги${freeDate ? ` — свобода к <b>${fmtDate(freeDate)}</b>` : ''}</div>
+      ${months < 600 ? `<div class="muted small">Переплата по процентам: ${fmt(interest)}</div>` : '<div class="muted small">Увеличь платёж — иначе не закроется</div>'}
+      ${renderChart(series)}
+    </div>
+
+    <div class="card">
+      <h3>🌀 Прокрутка кредиток</h3>
+      ${state.debts.map(d => {
+        const i = churnInfo(d);
+        if(!i || i.remaining <= 0) return '';
+        return `
+          <div class="cal-item">
+            <div class="cal-date" style="background:var(--p5)">
+              <div class="d">${fmtN(i.remaining/1000)}к</div>
+              <div class="m">остал.</div>
+            </div>
+            <div class="cal-body">
+              <div class="cal-title">${esc(d.name)}</div>
+              <div class="cal-sub">
+                ${i.daysLeft != null ? `${i.daysLeft} дн. до дедлайна · ` : ''}
+                ориентир ~${i.perDayNeeded ? i.perDayNeeded.toFixed(1) : '—'} кр./день
+              </div>
+            </div>
+          </div>`;
+      }).join('') || '<div class="muted small">Все циклы закрыты 🎉</div>'}
+    </div>
+
+    <div class="card">
+      <h3>Рекомендуемые даты платежей</h3>
+      <div class="muted small">Под ЗП 10 и 20 числа:</div>
+      <div class="cal-item"><div class="cal-date c-reminder"><div class="d">11</div><div class="m">число</div></div><div class="cal-body"><div class="cal-title">Кредитка 255к</div><div class="cal-sub">Мин. платёж — после ЗП 10-го</div></div></div>
+      <div class="cal-item"><div class="cal-date c-payment"><div class="d">21</div><div class="m">число</div></div><div class="cal-body"><div class="cal-title">Кредит 40%</div><div class="cal-sub">После ЗП 20-го (перенесён с 16-го)</div></div></div>
+      <div class="cal-item"><div class="cal-date c-risk"><div class="d">26</div><div class="m">число</div></div><div class="cal-body"><div class="cal-title">Кредитка 400к</div><div class="cal-sub">Закрытие грейса — есть 5 дней на добивку</div></div></div>
+    </div>
+  `;
+}
+
+function renderChart(series){
+  if(!series || series.length < 2) return '';
+  const w = 600, h = 150, pad = 16;
+  const max = Math.max(...series, 1);
+  const step = (w - pad*2) / (series.length - 1);
+  const pts = series.map((v,i)=>[ pad + i*step, h - pad - (v/max) * (h - pad*2) ]);
+  const line = pts.map((p,i)=>(i?'L':'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  const area = line + ` L ${pts[pts.length-1][0].toFixed(1)} ${h-pad} L ${pts[0][0].toFixed(1)} ${h-pad} Z`;
+  return `<svg viewBox="0 0 ${w} ${h}" class="chart" preserveAspectRatio="none">
+    <defs><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="var(--p1)" stop-opacity=".4"/>
+      <stop offset="100%" stop-color="var(--p1)" stop-opacity="0"/>
+    </linearGradient></defs>
+    <path d="${area}" fill="url(#g1)"/>
+    <path d="${line}" fill="none" stroke="var(--p1)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>`;
+}
+
+/* ============================================================
+   RENDER — DEBTS
+============================================================ */
+function renderDebts(){
+  const sorted = [...state.debts].sort((a,b)=>a.priority-b.priority);
+  const list = sorted.map(d=>{
+    const paid = Math.max(0, d.initial - d.current);
+    const pct = d.initial ? (paid/d.initial*100) : 0;
+    const closed = d.current <= 0;
+    return `
+      <div class="debt ${closed?'closed':''}">
+        <div class="debt-head">
+          <div class="debt-name" style="color:${closed?'var(--muted)':d.color}">${closed?'✓ ':''}${esc(d.name)}</div>
+          <div class="debt-amt">${fmt(d.current)}</div>
+        </div>
+        <div class="debt-meta">
+          <span>из ${fmt(d.initial)}</span>
+          ${d.rate>0 ? `<span class="chip">${d.rate}%</span>` : ''}
+          ${d.minPayment>0 ? `<span class="chip">мин. ${fmtN(d.minPayment)} ₽</span>` : ''}
+          ${d.dueDay ? `<span class="chip">до ${d.dueDay}-го</span>` : ''}
+          ${d.statementDay ? `<span class="chip">выписка ${d.statementDay}-го</span>` : ''}
+        </div>
+        ${d.note ? `<div class="muted small" style="margin-bottom:.3rem">${esc(d.note)}</div>` : ''}
+        <div class="progress"><div class="progress-fill" style="width:${pct}%;background:${closed?'var(--p2)':d.color}"></div></div>
+        ${renderChurnBlock(d)}
+        <div class="row" style="margin-top:.6rem">
+          ${closed
+            ? `<span class="muted small">Долг закрыт 🎉</span>`
+            : `<button class="btn warn sm" onclick="openPayModal('${d.id}')">Внести</button>
+               <button class="btn ghost sm" onclick="openEditDebtModal('${d.id}')">Изменить</button>`}
+        </div>
+      </div>`;
+  }).join('');
+
+  const history = state.payments.slice(-20).reverse().map(p=>{
+    const d = state.debts.find(x=>x.id===p.debtId);
+    return `<div class="cal-item">
+      <div class="cal-date c-payment"><div class="d">${new Date(p.date).getDate()}</div><div class="m">${new Date(p.date).toLocaleDateString('ru-RU',{month:'short'})}</div></div>
+      <div class="cal-body"><div class="cal-title">${esc(d?d.name:'—')}</div><div class="cal-sub">${fmt(p.amount)}${p.note?' · '+esc(p.note):''}</div></div>
+      <button class="btn ghost sm" onclick="undoPayment('${p.id}')">↩</button>
+    </div>`;
+  }).join('') || '<div class="muted small">Платежей пока нет</div>';
+
+  $('#panel-debts').innerHTML = `
+    <div class="card">
+      <h3>Долги по приоритету</h3>
+      ${list}
+      <button class="btn primary" style="margin-top:1rem;width:100%" onclick="openAddDebtModal()">+ Добавить долг</button>
+    </div>
+    <div class="card">
+      <h3>История платежей</h3>
+      ${history}
+    </div>
+  `;
+}
+
+/* ============================================================
+   RENDER — CALENDAR
+============================================================ */
+function renderCalendar(){
+  const events = upcomingEvents(90);
+  const next = events[0];
+  const items = events.slice(0, 25).map(e=>{
+    const dd = daysUntil(e.date);
+    const isToday = dd === 0;
+    const monthName = new Date(e.date).toLocaleDateString('ru-RU',{month:'short'});
+    return `<div class="cal-item ${isToday?'today':''}">
+      <div class="cal-date ${e.cls}"><div class="d">${new Date(e.date).getDate()}</div><div class="m">${monthName}</div></div>
+      <div class="cal-body">
+        <div class="cal-title">${esc(e.title)}</div>
+        <div class="cal-sub">${isToday?'сегодня':dd>0?`через ${dd} ${plural(dd,'день','дня','дней')}`:'просрочено'}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  $('#panel-calendar').innerHTML = `
+    ${next ? `
+      <div class="card alert ${daysUntil(next.date)<=3 && next.type==='payment'?'risk':''}">
+        <div class="alert-icon">⏰</div>
+        <div>
+          <div class="alert-title">${esc(next.title)}</div>
+          <div class="alert-sub">${fmtDate(next.date)} · ${daysUntil(next.date)>0?`через ${daysUntil(next.date)} ${plural(daysUntil(next.date),'день','дня','дней')}`:'сегодня'}</div>
+        </div>
+      </div>` : ''}
+
+    <div class="card">
+      <h3>Рекомендуемая схема</h3>
+      <div class="muted small">ЗП 10 и 20 → платим 11, 21, 26</div>
+      <div class="cal-item"><div class="cal-date c-reminder"><div class="d">11</div><div class="m">число</div></div><div class="cal-body"><div class="cal-title">Кредитка 255к — мин. платёж</div><div class="cal-sub">Сразу после ЗП 10-го</div></div></div>
+      <div class="cal-item"><div class="cal-date c-payment"><div class="d">21</div><div class="m">число</div></div><div class="cal-body"><div class="cal-title">Кредит 40%</div><div class="cal-sub">После ЗП 20-го</div></div></div>
+      <div class="cal-item"><div class="cal-date c-risk"><div class="d">26</div><div class="m">число</div></div><div class="cal-body"><div class="cal-title">Кредитка 400к — грейс</div><div class="cal-sub">Дедлайн закрытия грейса</div></div></div>
+      <button class="btn ghost" style="margin-top:.7rem;width:100%" onclick="applyRecommendedDates()">Применить рекомендованные даты</button>
+    </div>
+
+    <div class="card">
+      <h3>🗓 План кругов (по ₽/день)</h3>
+      ${state.debts.map(d => {
+        const sched = churnSchedule(d, 14);
+        if(!sched.length) return '';
+        return `
+          <div style="margin-bottom:.9rem">
+            <div class="muted small" style="margin-bottom:.3rem"><b>${esc(d.name)}</b></div>
+            <div class="churn-schedule">
+              ${sched.map(s => `
+                <div class="churn-day">
+                  <div class="d">${s.date.getDate()} ${s.date.toLocaleDateString('ru-RU',{month:'short'})}</div>
+                  <div class="c">~${fmtN(s.amount)} ₽</div>
+                </div>`).join('')}
+            </div>
+          </div>`;
+      }).join('') || '<div class="muted small">Нет активных циклов</div>'}
+      <div class="muted small" style="margin-top:.5rem">🌀 Озон возвращает <b>на карту</b> → лимит восстанавливается сам. Крути в любом темпе, пока успеваешь до дедлайна.</div>
+    </div>
+
+    <div class="card">
+      <h3>Ближайшие 90 дней</h3>
+      ${items || '<div class="muted small">Событий нет</div>'}
+    </div>
+  `;
+}
+
+function applyRecommendedDates(){
+  const map = { cc255: 11, loan: 21, cc400: 26 };
+  Object.entries(map).forEach(([id, day]) => {
+    const d = state.debts.find(x=>x.id===id);
+    if(d) d.dueDay = day;
+  });
+  saveState(); renderAll();
+  toast('Даты обновлены: 11 / 21 / 26');
+}
+
+/* ============================================================
+   RENDER — INCOME
+============================================================ */
+function renderIncome(){
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthShifts = state.shifts.filter(s => new Date(s.date) >= monthStart);
+  const monthTotal = monthShifts.reduce((s,x)=>s+x.total,0);
+  const monthHours = monthShifts.reduce((s,x)=>s+x.hours,0);
+  const avgPerShift = monthShifts.length ? monthTotal/monthShifts.length : 0;
+
+  const expRows = state.budget.expenses.map(e=>`
+    <div class="row" style="justify-content:space-between;padding:.35rem 0;border-bottom:1px solid var(--border)">
+      <span>${esc(e.name)}</span>
+      <input type="number" value="${e.amount}" min="0" style="width:110px;text-align:right"
+        onchange="updateExpense('${e.id}', this.value)">
+    </div>`).join('');
+
+  const shiftsList = monthShifts.slice().reverse().slice(0,12).map(s=>`
+    <div class="row" style="justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border)">
+      <span class="muted small">${fmtDay(s.date)} · ${s.hours}ч · ${fmtN(s.rate)}₽/ч</span>
+      <b>${fmt(s.total)}</b>
+    </div>`).join('') || '<div class="muted small">Смен пока нет</div>';
+
+  $('#panel-income').innerHTML = `
+    <div class="card">
+      <h3>Калькулятор смены</h3>
+      <div class="grid2">
+        <div><label>Часы</label><input type="number" id="calcHours" value="15" min="1"></div>
+        <div><label>Ставка ₽/час</label><input type="number" id="calcRate" value="200" min="1"></div>
+      </div>
+      <label>Выручка за смену (продажи, ₽)</label>
+      <input type="number" id="calcSales" value="0" min="0">
+      <div class="grid2" style="margin-top:.7rem">
+        <button class="btn ghost" onclick="calcShiftPreview()">Посчитать</button>
+        <button class="btn success" onclick="logShift()">+ Записать смену</button>
+      </div>
+      <div id="calcResult" class="card" style="display:none;margin-top:.8rem;background:var(--bg)"></div>
+    </div>
+
+    <div class="card">
+      <h3>Этот месяц</h3>
+      <div class="stats-grid">
+        <div class="stat"><div class="stat-num" style="color:var(--p2)">${fmt(monthTotal)}</div><div class="stat-lbl">Заработано</div></div>
+        <div class="stat"><div class="stat-num" style="color:var(--p1)">${monthShifts.length}</div><div class="stat-lbl">Смен</div></div>
+        <div class="stat"><div class="stat-num" style="color:var(--p4)">${monthHours}ч</div><div class="stat-lbl">Часов</div></div>
+        <div class="stat"><div class="stat-num" style="color:var(--p3)">${fmt(avgPerShift)}</div><div class="stat-lbl">Ср. смена</div></div>
+      </div>
+      ${shiftsList}
+    </div>
+
+    <div class="card">
+      <h3>Бюджет на месяц</h3>
+      <label>Плановый доход</label>
+      <input type="number" value="${state.budget.monthlyIncome}" min="0" onchange="updateIncome(this.value)">
+      <div style="margin-top:.6rem">${expRows}</div>
+      <div class="row" style="justify-content:space-between;padding:.6rem 0;font-weight:700">
+        <span>Свободно на долги</span>
+        <span style="color:var(--p2)">${fmt(monthlyAvailable())}</span>
+      </div>
+      <div class="muted small">Лимит трат в день: <b>${fmtN(dailyLimit())} ₽</b></div>
+    </div>
+
+    <div class="card">
+      <h3>Сколько смен надо?</h3>
+      <div class="muted small">Двигай срок — узнаешь нужное количество смен и доход</div>
+      <label>Цель: закрыть за N месяцев</label>
+      <input type="range" id="scMonths" min="6" max="48" value="24" oninput="renderSmenCalc()">
+      <div class="row" style="justify-content:space-between"><span class="muted small">Срок: <b id="scMonthsV">24</b> мес.</span></div>
+
+      <label>Доход со стендапа / нейро, ₽/мес</label>
+      <input type="range" id="scExtra" min="0" max="50000" step="1000" value="0" oninput="renderSmenCalc()">
+      <div class="row" style="justify-content:space-between"><span class="muted small">Стендап+нейро: <b id="scExtraV">0</b> ₽</span></div>
+
+      <div id="smenResult" style="margin-top:.8rem"></div>
+    </div>
+
+    <div class="card">
+      <h3>Разовые расходы</h3>
+      <div id="oneTimeList"></div>
+      <button class="btn ghost" style="margin-top:.6rem;width:100%" onclick="openAddOneTimeModal()">+ Добавить разовый расход</button>
+    </div>
+  `;
+  renderSmenCalc();
+  renderOneTime();
+}
+
+function renderSmenCalc(){
+  const targetMonths = +$('#scMonths').value;
+  const extra = +$('#scExtra').value;
+  $('#scMonthsV').textContent = targetMonths;
+  $('#scExtraV').textContent = fmtN(extra);
+
+  const total = totalCurrent();
+  const expenses = monthlyExpenses();
+  const neededPerMonth = total / targetMonths;
+  const neededIncome = neededPerMonth + expenses;
+  const shiftsNeeded = Math.ceil(neededIncome / 4000);
+  const realisticShifts = Math.max(22, Math.min(shiftsNeeded, 31));
+  const realIncome = realisticShifts * 4000 + extra;
+  const realAvail = realIncome - expenses;
+  const {months, interest} = projectSeries(realAvail);
+  const freeDate = months < 600 ? addMonths(new Date(), months) : null;
+
+  $('#smenResult').innerHTML = `
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-num" style="color:var(--p1)">${shiftsNeeded}</div><div class="stat-lbl">Смен нужно/мес</div></div>
+      <div class="stat"><div class="stat-num" style="color:var(--p4)">${fmtN(neededIncome)} ₽</div><div class="stat-lbl">Доход/мес</div></div>
+      <div class="stat"><div class="stat-num" style="color:var(--p2)">${monthsToText(months)}</div><div class="stat-lbl">Реальный срок</div></div>
+      <div class="stat"><div class="stat-num" style="color:var(--p3)">${freeDate?fmtDate(freeDate):'—'}</div><div class="stat-lbl">Свобода</div></div>
+    </div>
+    <div class="muted small">
+      ${shiftsNeeded > 26
+        ? `⚠️ ${shiftsNeeded} смен — это много. Реалистичный максимум ~26 смен/мес. Растяни срок или добавь доход со стендапа/нейро.`
+        : shiftsNeeded <= 22
+          ? `✅ ${shiftsNeeded} смен — реально, даже с запасом.`
+          : `📌 ${shiftsNeeded} смен — в пределах нормы, но без запаса.`}
+      ${months < 600 ? `<br>Переплата по процентам: ${fmt(interest)}.` : ''}
+    </div>
+  `;
+}
+
+function renderOneTime(){
+  const list = state.oneTime.map(o=>`
+    <div class="row" style="justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border)">
+      <span>${esc(o.name)}</span>
+      <span><b>${fmt(o.amount)}</b> <button class="btn ghost sm" onclick="deleteOneTime('${o.id}')">🗑</button></span>
+    </div>`).join('') || '<div class="muted small">Разовых расходов нет</div>';
+  $('#oneTimeList').innerHTML = list;
+}
+
+function openAddOneTimeModal(){
+  openModal({
+    title: 'Разовый расход',
+    body: `
+      <label>Название</label><input name="name" required>
+      <label>Сумма, ₽</label><input type="number" name="amount" min="1" required>
+    `,
+    onSubmit: data => {
+      state.oneTime.push({ id:'o_'+Date.now(), name:data.name, amount:Number(data.amount) });
+      saveState(); renderIncome(); toast('Добавлено');
+    }
+  });
+}
+function deleteOneTime(id){
+  state.oneTime = state.oneTime.filter(o=>o.id!==id);
+  saveState(); renderIncome();
+}
+
+/* ============================================================
+   RENDER — STANDUP
+============================================================ */
+function renderStandup(){
+  const weekKey = getWeekKey();
+  const checked = state.standup.openMics[weekKey] || [false,false,false,false];
+  const done = checked.filter(Boolean).length;
+  const pct = done/4*100;
+
+  const checklist = [0,1,2,3].map(i=>`
+    <label class="check">
+      <input type="checkbox" ${checked[i]?'checked':''} onchange="toggleMic(${i}, this.checked)">
+      Опен-мик ${i+1}
+    </label>`).join('');
+
+  $('#panel-standup').innerHTML = `
+    <div class="card">
+      <h3>Расписание недели</h3>
+      <div class="week-grid">
+        <div class="week-cell day-barista">Пн<br>Бариста</div>
+        <div class="week-cell day-barista">Вт<br>Бариста</div>
+        <div class="week-cell day-barista">Ср<br>Бариста</div>
+        <div class="week-cell day-barista">Чт<br>Бариста</div>
+        <div class="week-cell day-barista">Пт<br>Бариста</div>
+        <div class="week-cell day-standup">Сб<br>Стендап</div>
+        <div class="week-cell day-neuro">Вс<br>Нейро</div>
+      </div>
+      <div class="muted small" style="margin-top:.6rem">Сб — 2ч материала + 1–2 опен-мика. Вс — отдых + нейронки.</div>
+    </div>
+
+    <div class="card">
+      <h3>Прогресс недели</h3>
+      <div class="muted small">Опен-миков: <b>${done} / 4</b></div>
+      <div class="progress" style="margin:.4rem 0 .8rem"><div class="progress-fill" style="width:${pct}%;background:var(--p2)"></div></div>
+      ${checklist}
+      <div class="muted small" style="margin-top:.6rem">Чек-лист сбрасывается каждую неделю.</div>
+    </div>
+
+    <div class="card">
+      <h3>Материал</h3>
+      <label>Минут готового материала</label>
+      <input type="number" id="materialMin" value="${state.standup.materialMinutes||0}" min="0" onchange="updateMaterial(this.value)">
+      <div class="progress" style="margin-top:.5rem"><div class="progress-fill" style="width:${Math.min(100,(state.standup.materialMinutes||0)/15*100)}%;background:var(--p4)"></div></div>
+      <div class="muted small" style="margin-top:.4rem">Цель первого полугодия — 15 мин.</div>
+    </div>
+
+    <div class="card">
+      <h3>План монетизации</h3>
+      <div class="cal-item"><div class="cal-date c-statement"><div class="d">1–6</div><div class="m">мес</div></div><div class="cal-body"><div class="cal-title">Стендап 0 ₽, нейро — изучаю</div><div class="cal-sub">Фокус: 15 мин материала + 4 опен-мика/нед</div></div></div>
+      <div class="cal-item"><div class="cal-date c-payment"><div class="d">6–12</div><div class="m">мес</div></div><div class="cal-body"><div class="cal-title">Первые споты: 5–10к/мес</div><div class="cal-sub">+ первые нейро-видео</div></div></div>
+      <div class="cal-item"><div class="cal-date c-risk"><div class="d">12–18</div><div class="m">мес</div></div><div class="cal-body"><div class="cal-title">2–3 выступления/нед: 10–15к/мес</div><div class="cal-sub">+ нейро на потоке</div></div></div>
+    </div>
+
+    <div class="card">
+      <h3>Темы для шуток</h3>
+      <div class="muted small">
+        • Юристы за 47к «через друга»<br>
+        • Грейс-период, выписка, «а вдруг не успею»<br>
+        • 15-часовые смены и попытки быть комиком<br>
+        • 40% годовых как личный антирекорд<br>
+        • Штраф 16к за недовнесённый платёж<br>
+        • Жизнь с Аней, аренда, делёжка 50/50<br>
+        • Нейронки, которые должны спасти
+      </div>
+    </div>
+  `;
+}
+
+/* ============================================================
+   RENDER — SCREENS (новая вкладка)
+============================================================ */
+async function renderScreens(){
+  const screens = state.screens.slice().reverse();
+  const todayStr = new Date().toDateString();
+  const todaySpends = state.spends.filter(s => new Date(s.date).toDateString() === todayStr);
+  const todayTotal = todaySpends.reduce((s,x)=>s+Math.abs(x.amount),0);
+  const limit = dailyLimit();
+  const overLimit = todayTotal > limit;
+
+  const balanceHtml = state.debts.filter(d=>d.current>0).map(d=>{
+    const b = state.balances[d.id];
+    return `
+      <div class="balance-card">
+        <div class="n">${esc(d.name)}</div>
+        <div class="v" style="color:${d.color}">${b ? fmt(b.amount) : '—'}</div>
+        <div class="d">${b ? 'обновлено ' + fmtDate(b.updatedAt) : 'нет данных'}</div>
+      </div>`;
+  }).join('');
+
+  const spendsTodayHtml = todaySpends.length ? todaySpends.map(s=>`
+    <div class="cal-item">
+      <div class="cal-date c-payment"><div class="d">${Math.abs(s.amount).toFixed(0)}</div><div class="m">₽</div></div>
+      <div class="cal-body">
+        <div class="cal-title">${esc(s.merchant||'—')}</div>
+        <div class="cal-sub">
+          <span class="spend-cat cat-${s.category}">${categoryLabel(s.category)}</span>
+          ${s.note ? ' · ' + esc(s.note) : ''}
+        </div>
+      </div>
+      <button class="btn ghost sm" onclick="deleteSpend('${s.id}')">🗑</button>
+    </div>`).join('') : '<div class="muted small">Сегодня трат нет</div>';
+
+  const screensHtml = screens.length ? (await Promise.all(screens.slice(0,10).map(async s=>{
+    const rec = await idbGet(s.id);
+    const url = rec ? URL.createObjectURL(rec.blob) : '';
+    return `
+      <div class="screen-card">
+        ${url ? `<img src="${url}" class="screen-thumb" alt="">` : '<div class="screen-thumb"></div>'}
+        <div class="screen-info">
+          <div class="t">${esc(s.name)}</div>
+          <div class="s">${fmtDate(s.addedAt)} · ${(s.size/1024).toFixed(0)} КБ${s.parsed ? ' · распознан' : ''}</div>
+        </div>
+        <button class="btn ghost sm" onclick="openScreen('${s.id}')">👁</button>
+        <button class="btn ghost sm" onclick="deleteScreen('${s.id}')">🗑</button>
+      </div>`;
+  }))).join('') : '<div class="muted small">Скринов пока нет</div>';
+
+  $('#panel-screens').innerHTML = `
+    <div class="card">
+      <h3>📸 Загрузить скрин</h3>
+      <div class="drop-zone" id="dropZone">
+        <div class="ico">📷</div>
+        <div class="t">Нажми или перетащи скрин</div>
+        <div class="s">Можно несколько сразу · JPG/PNG</div>
+      </div>
+      <input type="file" id="screenFile" accept="image/*" multiple hidden>
+      <div id="ocrStatus" class="muted small"></div>
+    </div>
+
+    <div class="card">
+      <h3>💳 Балансы карт</h3>
+      <div class="balance-grid">${balanceHtml}</div>
+    </div>
+
+    <div class="card">
+      <h3>Сегодня: траты</h3>
+      <div class="stats-grid">
+        <div class="stat">
+          <div class="stat-num" style="color:${overLimit?'var(--p3)':'var(--p2)'}">${fmt(todayTotal)}</div>
+          <div class="stat-lbl">Потрачено</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num" style="color:var(--p1)">${fmtN(limit)} ₽</div>
+          <div class="stat-lbl">Лимит/день</div>
+        </div>
+      </div>
+      ${overLimit ? '<div class="alert risk" style="margin-top:.6rem"><div class="alert-icon">⚠️</div><div><div class="alert-title">Перебор лимита</div><div class="alert-sub">Превышение на ' + fmt(todayTotal-limit) + '</div></div></div>' : ''}
+      <div style="margin-top:.6rem">${spendsTodayHtml}</div>
+      <button class="btn ghost" style="margin-top:.6rem;width:100%" onclick="openAddSpendModal()">+ Добавить трату вручную</button>
+    </div>
+
+    <div class="card">
+      <h3>🗂 Последние скрины</h3>
+      ${screensHtml}
+    </div>
+  `;
+
+  const dz = $('#dropZone');
+  const fi = $('#screenFile');
+  if(dz && fi){
+    dz.onclick = () => fi.click();
+    dz.ondragover = e => { e.preventDefault(); dz.classList.add('over'); };
+    dz.ondragleave = () => dz.classList.remove('over');
+    dz.ondrop = e => {
+      e.preventDefault(); dz.classList.remove('over');
+      handleScreenFiles([...e.dataTransfer.files]);
+    };
+    fi.onchange = e => handleScreenFiles([...e.target.files]);
+  }
+}
+
+async function handleScreenFiles(files){
+  const imgs = files.filter(f => f.type.startsWith('image/'));
+  if(!imgs.length) return;
+  const status = $('#ocrStatus');
+
+  for(const file of imgs){
+    const id = 'sc_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+    status.innerHTML = `<span class="spinner"></span>Распознаю «${esc(file.name)}»…`;
+    try{
+      const { data:{ text } } = await Tesseract.recognize(file, 'rus+eng', {
+        logger: m => {
+          if(m.status === 'recognizing text'){
+            status.innerHTML = `<span class="spinner"></span>«${esc(file.name)}» — ${Math.round(m.progress*100)}%`;
+          }
+        }
+      });
+      const parsed = parseOCRText(text);
+      const meta = {
+        id, name: file.name, size: file.size, mime: file.type,
+        addedAt: new Date().toISOString(),
+        ocrText: text, parsed
+      };
+      await idbPut({ id, blob: file });
+      state.screens.push(meta);
+      saveState();
+      status.innerHTML = `✅ «${esc(file.name)}» — распознано`;
+      openOcrConfirmModal(meta);
+    }catch(e){
+      console.error(e);
+      status.innerHTML = `❌ Ошибка на «${esc(file.name)}»: ${esc(e.message)}`;
+    }
+  }
+  renderScreens();
+}
+
+function openOcrConfirmModal(meta){
+  const p = meta.parsed || { balances:[], spends:[] };
+
+  const balRows = p.balances.map((b,i)=>`
+    <div class="parsed-row">
+      <select name="balDebt_${i}" style="flex:1">
+        <option value="">— какая карта? —</option>
+        ${state.debts.filter(d=>d.current>0).map(d=>`
+          <option value="${d.id}" ${b.matchedDebtId===d.id?'selected':''}>${esc(d.name)}</option>
+        `).join('')}
+      </select>
+      <input type="number" class="amt" name="balAmt_${i}" value="${Math.round(b.amount)}">
+      <button type="button" class="btn ghost sm" onclick="this.parentElement.remove()">✕</button>
+    </div>`).join('');
+
+  const spendRows = p.spends.map((s,i)=>`
+    <div class="parsed-row">
+      <input name="spMerchant_${i}" value="${esc(s.merchant||'')}" placeholder="магазин" style="flex:1">
+      <select name="spCat_${i}" style="width:120px">
+        ${['food','transport','phone','home','standup','other'].map(c=>`
+          <option value="${c}" ${s.category===c?'selected':''}>${categoryLabel(c)}</option>
+        `).join('')}
+      </select>
+      <input type="number" class="amt" name="spAmt_${i}" value="${Math.round(s.amount)}">
+      <button type="button" class="btn ghost sm" onclick="this.parentElement.remove()">✕</button>
+    </div>`).join('');
+
+  openModal({
+    title: 'Проверь распознанное',
+    submitText: 'Применить',
+    body: `
+      <div class="muted small">Скрин: <b>${esc(meta.name)}</b></div>
+
+      ${balRows ? `
+        <div style="margin-top:.8rem"><b>💳 Балансы</b></div>
+        ${balRows}
+      ` : '<div class="muted small" style="margin-top:.6rem">Балансы не найдены</div>'}
+
+      ${spendRows ? `
+        <div style="margin-top:.8rem"><b>💸 Траты</b></div>
+        ${spendRows}
+      ` : '<div class="muted small" style="margin-top:.6rem">Траты не найдены</div>'}
+
+      <details style="margin-top:.8rem">
+        <summary class="muted small" style="cursor:pointer">Показать сырой текст OCR</summary>
+        <div class="ocr-preview ocr-raw">${esc(meta.ocrText||'')}</div>
+      </details>
+    `,
+    onSubmit: data => {
+      let applied = 0;
+
+      p.balances.forEach((_,i)=>{
+        const debtId = data[`balDebt_${i}`];
+        const amt = Number(data[`balAmt_${i}`]);
+        if(debtId && amt > 0){
+          state.balances[debtId] = { amount: amt, updatedAt: new Date().toISOString() };
+          applied++;
+        }
+      });
+
+      p.spends.forEach((_,i)=>{
+        const m = data[`spMerchant_${i}`];
+        const c = data[`spCat_${i}`];
+        const a = Number(data[`spAmt_${i}`]);
+        if(a){
+          state.spends.push({
+            id: 'sp_'+Date.now()+'_'+i,
+            date: new Date().toISOString(),
+            amount: a,
+            merchant: m || '—',
+            category: c || 'other',
+            screenId: meta.id
+          });
+          applied++;
+        }
+      });
+
+      saveState(); renderAll();
+      toast(`Применено записей: ${applied}`);
+    }
+  });
+}
+
+async function openScreen(id){
+  const rec = await idbGet(id);
+  if(!rec) return;
+  const url = URL.createObjectURL(rec.blob);
+  openModal({
+    title: 'Скрин',
+    submitText: 'Закрыть',
+    body: `<img src="${url}" style="width:100%;border-radius:10px">`,
+    onSubmit: () => {}
+  });
+}
+
+async function deleteScreen(id){
+  if(!confirm('Удалить скрин?')) return;
+  await idbDelete(id);
+  state.screens = state.screens.filter(s=>s.id!==id);
+  saveState(); renderScreens();
+  toast('Удалено', 'err');
+}
+
+function deleteSpend(id){
+  state.spends = state.spends.filter(s=>s.id!==id);
+  saveState(); renderScreens();
+}
+
+function openAddSpendModal(){
+  openModal({
+    title: 'Ручная трата',
+    body: `
+      <label>Сумма, ₽ (минус для траты)</label>
+      <input type="number" name="amount" value="-100" required autofocus>
+      <label>Магазин / комментарий</label>
+      <input name="merchant" placeholder="Пятёрочка">
+      <label>Категория</label>
+      <select name="category">
+        ${['food','transport','phone','home','standup','other'].map(c=>`
+          <option value="${c}">${categoryLabel(c)}</option>
+        `).join('')}
+      </select>
+    `,
+    onSubmit: data => {
+      const a = Number(data.amount);
+      if(!a) return false;
+      state.spends.push({
+        id: 'sp_'+Date.now(),
+        date: new Date().toISOString(),
+        amount: a,
+        merchant: data.merchant||'—',
+        category: data.category||'other'
+      });
+      saveState(); renderAll();
+      toast('Трата записана');
+    }
+  });
+}
+
+/* ============================================================
+   RENDER — NOTES
+============================================================ */
+function renderNotes(){
+  const allTags = [...new Set(state.notes.flatMap(n=>n.tags||[]))];
+  const filtered = state.notes.filter(n=>{
+    if(notesTag && !(n.tags||[]).includes(notesTag)) return false;
+    if(notesQuery){
+      const q = notesQuery.toLowerCase();
+      return (n.title||'').toLowerCase().includes(q) || (n.text||'').toLowerCase().includes(q);
+    }
+    return true;
+  }).reverse();
+
+  const tagChips = allTags.map(t=>`<span class="tag ${notesTag===t?'active':''}" onclick="toggleTag('${esc(t)}')">${esc(t)}</span>`).join('');
+  const list = filtered.map(n=>`
+    <div class="note">
+      <div class="note-title">${esc(n.title||'Без названия')}</div>
+      <div class="note-meta">${n.date||''}</div>
+      <div class="note-text">${esc(n.text||'')}</div>
+      <div>${(n.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>
+      <div class="row" style="margin-top:.5rem">
+        <button class="btn ghost sm" onclick="editNote('${n.id}')">✏️</button>
+        <button class="btn danger sm" onclick="deleteNote('${n.id}')">🗑</button>
+      </div>
+    </div>`).join('') || '<div class="muted small">Заметок нет</div>';
+
+  $('#panel-notes').innerHTML = `
+    <div class="card">
+      <h3>Новая заметка</h3>
+      <label>Заголовок</label><input id="noteTitle" placeholder="Например: долг юристам 47к">
+      <label>Текст</label><textarea id="noteText" placeholder="Что здесь смешного?"></textarea>
+      <label>Теги (через пробел)</label><input id="noteTags" placeholder="долги бариста кредит">
+      <button class="btn success" style="margin-top:.7rem;width:100%" onclick="saveNote()">Сохранить</button>
+    </div>
+
+    <div class="card">
+      <h3>Поиск</h3>
+      <input id="notesSearch" placeholder="Поиск" value="${esc(notesQuery)}"
+        oninput="notesQuery=this.value;renderNotes();setTimeout(()=>{const i=document.getElementById('notesSearch');i.focus();i.setSelectionRange(i.value.length,i.value.length);},0)">
+      <div style="margin-top:.5rem">${tagChips}</div>
+    </div>
+
+    <div class="card">
+      <h3>Заметки (${filtered.length})</h3>
+      ${list}
+    </div>
+  `;
+}
+
+/* ============================================================
+   ACTIONS
+============================================================ */
+function openPayModal(debtId){
+  const d = state.debts.find(x=>x.id===debtId);
+  if(!d) return;
+  openModal({
+    title: 'Платёж: ' + d.name,
+    body: `
+      <div class="muted small">Остаток: <b>${fmt(d.current)}</b></div>
+      <label>Сумма, ₽</label>
+      <input type="number" name="amount" value="${d.minPayment||''}" min="1" required autofocus>
+      <div class="row" style="margin-top:.6rem">
+        ${d.minPayment?`<button type="button" class="btn ghost sm" onclick="this.form.amount.value=${d.minPayment}">Мин. ${fmtN(d.minPayment)}</button>`:''}
+        <button type="button" class="btn ghost sm" onclick="this.form.amount.value=${d.current}">Всё (${fmtN(d.current)})</button>
+      </div>
+      <label>Заметка</label>
+      <input name="note" placeholder="Например: с ЗП">
+    `,
+    submitText: 'Внести',
+    onSubmit: data => {
+      const amt = Number(data.amount);
+      if(!amt || amt<=0) return false;
+      d.current = Math.max(0, d.current - amt);
+      state.payments.push({
+        id: 'p_'+Date.now(), debtId: d.id, amount: amt,
+        date: new Date().toISOString(), note: data.note||''
+      });
+      saveState(); renderAll();
+      toast(`Платёж ${fmt(amt)} по «${d.name}»`);
+    }
+  });
+}
+
+function undoPayment(paymentId){
+  const p = state.payments.find(x=>x.id===paymentId);
+  if(!p) return;
+  if(!confirm(`Отменить платёж ${fmt(p.amount)}?`)) return;
+  const d = state.debts.find(x=>x.id===p.debtId);
+  if(d) d.current = Math.min(d.initial, d.current + p.amount);
+  state.payments = state.payments.filter(x=>x.id!==paymentId);
+  saveState(); renderAll();
+  toast('Платёж отменён', 'err');
+}
+
+function openAddDebtModal(){
+  openModal({
+    title: 'Новый долг',
+    body: `
+      <label>Название</label><input name="name" required>
+      <div class="grid2">
+        <div><label>Сумма, ₽</label><input type="number" name="amount" min="1" required></div>
+        <div><label>Ставка, %</label><input type="number" name="rate" value="0" min="0"></div>
+      </div>
+      <div class="grid2">
+        <div><label>Мин. платёж</label><input type="number" name="minPayment" value="0" min="0"></div>
+        <div><label>Приоритет</label><input type="number" name="priority" value="${state.debts.length+1}" min="1"></div>
+      </div>
+      <div class="grid2">
+        <div><label>День платежа</label><input type="number" name="dueDay" min="1" max="31"></div>
+        <div><label>День выписки</label><input type="number" name="statementDay" min="1" max="31"></div>
+      </div>
+    `,
+    onSubmit: data => {
+      const amt = Number(data.amount);
+      if(!amt || amt<=0) return false;
+      state.debts.push({
+        id: 'd_'+Date.now(), name: data.name,
+        initial: amt, current: amt,
+        rate: Number(data.rate)||0, minPayment: Number(data.minPayment)||0,
+        dueDay: data.dueDay?Number(data.dueDay):null,
+        statementDay: data.statementDay?Number(data.statementDay):null,
+        priority: Number(data.priority)||99,
+        color: '#'+Math.floor(Math.random()*16777215).toString(16).padStart(6,'0'),
+        note: ''
+      });
+      saveState(); renderAll(); toast('Долг добавлен');
+    }
+  });
+}
+
+function openEditDebtModal(debtId){
+  const d = state.debts.find(x=>x.id===debtId);
+  if(!d) return;
+  openModal({
+    title: 'Изменить: ' + d.name,
+    body: `
+      <label>Название</label><input name="name" value="${esc(d.name)}" required>
+      <div class="grid2">
+        <div><label>Текущий остаток</label><input type="number" name="current" value="${d.current}" min="0"></div>
+        <div><label>Начальная сумма</label><input type="number" name="initial" value="${d.initial}" min="1"></div>
+      </div>
+      <div class="grid2">
+        <div><label>Ставка, %</label><input type="number" name="rate" value="${d.rate}" min="0"></div>
+        <div><label>Мин. платёж</label><input type="number" name="minPayment" value="${d.minPayment}" min="0"></div>
+      </div>
+      <div class="grid2">
+        <div><label>День платежа</label><input type="number" name="dueDay" value="${d.dueDay||''}" min="1" max="31"></div>
+        <div><label>Приоритет</label><input type="number" name="priority" value="${d.priority}" min="1"></div>
+      </div>
+      <label>Заметка</label>
+      <input name="note" value="${esc(d.note||'')}">
+      <button type="button" class="btn danger" style="margin-top:.9rem;width:100%" onclick="deleteDebt('${d.id}')">Удалить</button>
+    `,
+    onSubmit: data => {
+      d.name = data.name;
+      d.current = Math.max(0, Number(data.current)||0);
+      d.initial = Math.max(1, Number(data.initial)||1);
+      d.rate = Number(data.rate)||0;
+      d.minPayment = Number(data.minPayment)||0;
+      d.dueDay = data.dueDay?Number(data.dueDay):null;
+      d.priority = Number(data.priority)||99;
+      d.note = data.note||'';
+      saveState(); renderAll(); toast('Сохранено');
+    }
+  });
+}
+
+function deleteDebt(id){
+  if(!confirm('Удалить долг и всю историю?')) return;
+  state.debts = state.debts.filter(x=>x.id!==id);
+  state.payments = state.payments.filter(p=>p.debtId!==id);
+  saveState(); renderAll(); closeModal(); toast('Удалено', 'err');
+}
+
+function calcShiftPreview(){
+  const h = +$('#calcHours').value || 0;
+  const r = +$('#calcRate').value || 0;
+  const s = +$('#calcSales').value || 0;
+  const bonus = s*0.03;
+  const total = h*r + bonus;
+  const el = $('#calcResult');
+  el.style.display = 'block';
+  el.innerHTML = `
+    <div class="muted small">Доход за смену</div>
+    <div style="font-size:1.4rem;font-weight:800;color:var(--p2)">${fmt(total)}</div>
+    <div class="muted small">Ставка: ${fmt(h*r)} · Бонус 3%: ${fmt(bonus)}</div>
+  `;
+}
+
+function logShift(){
+  const h = +$('#calcHours').value || 0;
+  const r = +$('#calcRate').value || 0;
+  const s = +$('#calcSales').value || 0;
+  if(h<=0 || r<=0) return toast('Укажи часы и ставку', 'err');
+  const total = h*r + s*0.03;
+  state.shifts.push({ id:'s_'+Date.now(), date:new Date().toISOString(), hours:h, rate:r, sales:s, total });
+  saveState(); renderIncome(); toast(`Смена: ${fmt(total)}`);
+}
+
+function updateIncome(v){ state.budget.monthlyIncome = Math.max(0, Number(v)||0); saveState(); renderAll(); }
+function updateExpense(id, v){
+  const e = state.budget.expenses.find(x=>x.id===id);
+  if(!e) return;
+  e.amount = Math.max(0, Number(v)||0);
+  saveState(); renderAll();
+}
+
+function toggleMic(i, val){
+  const key = getWeekKey();
+  if(!state.standup.openMics[key]) state.standup.openMics[key] = [false,false,false,false];
+  state.standup.openMics[key][i] = val;
+  saveState(); renderStandup();
+}
+function updateMaterial(v){
+  state.standup.materialMinutes = Math.max(0, Number(v)||0);
+  saveState(); renderStandup();
+}
+
+function saveNote(){
+  const title = $('#noteTitle').value.trim();
+  const text = $('#noteText').value.trim();
+  const tags = $('#noteTags').value.split(/\s+/).filter(Boolean);
+  if(!title && !text) return toast('Добавь заголовок или текст', 'err');
+  state.notes.push({ id:'n_'+Date.now(), title, text, tags, date: new Date().toLocaleDateString('ru-RU') });
+  saveState(); renderNotes(); toast('Сохранено');
+}
+function editNote(id){
+  const n = state.notes.find(x=>x.id===id);
+  if(!n) return;
+  openModal({
+    title: 'Редактировать',
+    body: `
+      <label>Заголовок</label><input name="title" value="${esc(n.title||'')}">
+      <label>Текст</label><textarea name="text">${esc(n.text||'')}</textarea>
+      <label>Теги</label><input name="tags" value="${esc((n.tags||[]).join(' '))}">
+    `,
+    onSubmit: data => {
+      n.title = data.title; n.text = data.text;
+      n.tags = data.tags.split(/\s+/).filter(Boolean);
+      saveState(); renderNotes(); toast('Обновлено');
+    }
+  });
+}
+function deleteNote(id){
+  if(!confirm('Удалить заметку?')) return;
+  state.notes = state.notes.filter(x=>x.id!==id);
+  saveState(); renderNotes(); toast('Удалено', 'err');
+}
+function toggleTag(tag){ notesTag = (notesTag === tag) ? '' : tag; renderNotes(); }
+
+/* ============================================================
+   MODAL
+============================================================ */
+let modalSubmitHandler = null;
+function openModal({title, body, submitText='Сохранить', onSubmit}){
+  $('#modalTitle').textContent = title;
+  $('#modalBody').innerHTML = body;
+  $('#modalSubmit').textContent = submitText;
+  modalSubmitHandler = onSubmit;
+  $('#modal').classList.remove('hidden');
+  setTimeout(()=>{ const f = $('#modalBody input, #modalBody textarea'); if(f) f.focus(); }, 60);
+}
+function closeModal(){ $('#modal').classList.add('hidden'); modalSubmitHandler = null; }
+$('#modalForm').addEventListener('submit', e=>{
+  e.preventDefault();
+  if(!modalSubmitHandler) return closeModal();
+  const data = Object.fromEntries(new FormData(e.target));
+  if(modalSubmitHandler(data) !== false) closeModal();
+});
+$('#modal').addEventListener('click', e=>{ if(e.target.id==='modal') closeModal(); });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
+
+/* ============================================================
+   TABS & THEME & EXPORT
+============================================================ */
+$('#tabs').addEventListener('click', e=>{
+  const b = e.target.closest('.tab');
+  if(!b) return;
+  $$('.tab').forEach(x=>x.classList.toggle('active', x===b));
+  $$('.panel').forEach(p=>p.classList.toggle('active', p.id==='panel-'+b.dataset.tab));
+});
+
+function applyTheme(t){
+  document.documentElement.setAttribute('data-theme', t);
+  state.settings.theme = t;
+  $('#themeBtn').textContent = t==='dark' ? '☀️' : '🌙';
+  document.querySelector('meta[name=theme-color]').content = t==='dark' ? '#0b1220' : '#f1f5f9';
+  saveState();
+}
+$('#themeBtn').addEventListener('click', ()=>{ applyTheme(state.settings.theme === 'dark' ? 'light' : 'dark'); });
+
+$('#exportBtn').addEventListener('click', ()=>{
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `debt-tracker-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('Экспортировано');
+});
+
+$('#csvBtn').addEventListener('click', ()=>{
+  const rows = [['Тип','Дата','Название','Сумма','Заметка']];
+  state.payments.forEach(p=>{
+    const d = state.debts.find(x=>x.id===p.debtId);
+    rows.push(['Платёж', p.date, d?d.name:'', p.amount, p.note||'']);
+  });
+  state.shifts.forEach(s=>{
+    rows.push(['Смена', s.date, `${s.hours}ч × ${s.rate}₽`, s.total, `Продажи: ${s.sales||0}`]);
+  });
+  state.spends.forEach(s=>{
+    rows.push(['Трата', s.date, s.merchant||'', s.amount, categoryLabel(s.category)]);
+  });
+  const csv = rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `debt-data-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('CSV экспортирован');
+});
+
+$('#importBtn').addEventListener('click', ()=> $('#importFile').click());
+$('#importFile').addEventListener('change', e=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try{
+      const data = JSON.parse(r.result);
+      state = migrate(data);
+      saveState(); applyTheme(state.settings.theme||'dark'); renderAll();
+      toast('Импортировано');
+    }catch(err){ toast('Ошибка импорта', 'err'); }
+  };
+  r.readAsText(f);
+  e.target.value = '';
+});
+
+/* ============================================================
+   RENDER ALL + INIT
+============================================================ */
+function renderAll(){
+  renderOverview();
+  renderDebts();
+  renderCalendar();
+  renderIncome();
+  renderStandup();
+  renderScreens();
+  renderNotes();
+}
+applyTheme(state.settings.theme || 'dark');
+renderAll();
+</script>
+</body>
+</html>
