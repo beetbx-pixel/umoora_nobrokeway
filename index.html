@@ -308,6 +308,13 @@ function saveState(){
   try{
     localStorage.setItem(LS_KEY, JSON.stringify(state));
     if(syncChannel) syncChannel.postMessage({ type:'update', payload: state });
+    // → Firebase: пишем в облако
+    if(fbReady && fbUser && fbDb){
+      fbDb.collection('users').doc(fbUser.uid).set({
+        data: state,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }).catch(e => console.warn('Firebase save error:', e));
+    }
   }catch(e){ console.warn(e); }
 }
 function migrate(s){
