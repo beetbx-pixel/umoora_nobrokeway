@@ -211,8 +211,42 @@
 /* ============================================================
    STATE
 ============================================================ */
-const LS_KEY = 'debt_standup_tracker_v5';
+/* ============================================================
+   FIREBASE
+============================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyCO-m8tat9RHhKa5-dlWpanveElBtpfxco",
+  authDomain: "nobrokeway.firebaseapp.com",
+  projectId: "nobrokeway",
+  storageBucket: "nobrokeway.firebasestorage.app",
+  messagingSenderId: "577683713672",
+  appId: "1:577683713672:web:ca7e94188780db93b2393d"
+};
 
+let fbAuth = null;
+let fbDb = null;
+let fbUser = null;
+let fbReady = false;
+
+try{
+  firebase.initializeApp(firebaseConfig);
+  fbAuth = firebase.auth();
+  fbDb = firebase.firestore();
+  fbAuth.onAuthStateChanged(async (user) => {
+    if(!user){
+      try{ await fbAuth.signInAnonymously(); }
+      catch(e){ console.warn('auth error', e); }
+    } else {
+      fbUser = user;
+      fbReady = true;
+      console.log('🔥 Firebase user:', user.uid);
+    }
+  });
+}catch(e){
+  console.warn('Firebase init failed', e);
+}
+
+  const LS_KEY = 'debt_standup_tracker_v5';
 const DEFAULT_STATE = {
   version: 5,
   debts: [
