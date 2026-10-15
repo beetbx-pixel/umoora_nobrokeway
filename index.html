@@ -166,6 +166,7 @@
     <button class="icon-btn" onclick="alert('fb: ' + typeof firebase + ' | ready: ' + (typeof fbReady!=='undefined'?fbReady:'no') + ' | user: ' + (typeof fbUser!=='undefined'&&fbUser?fbUser.uid:'no'))" title="Debug">🐞</button>
     <button class="icon-btn" id="csvBtn" title="Экспорт CSV">📊</button>
     <button class="icon-btn" id="importBtn" title="Импорт">⬆️</button>
+    <button class="icon-btn" id="logoutBtn" title="Выйти" style="display:none">🚪</button>
     <input type="file" id="importFile" accept="application/json" hidden>
   </div>
 </header>
@@ -235,16 +236,18 @@ try{
   fbAuth = firebase.auth();
   fbDb = firebase.firestore();
 
-fbAuth.onAuthStateChanged(async (user) => {
-  if(!user){
-    try{ await fbAuth.signInAnonymously(); }
-    catch(e){ console.warn('auth error', e); }
-  } else {
+  fbAuth.onAuthStateChanged(async (user) => {
+    if(!user){
+      // Показываем экран входа
+      showLoginOverlay();
+      return;
+    }
+    // Успешный вход
     fbUser = user;
     fbReady = true;
-    console.log('🔥 Firebase user:', user.uid);
+    console.log('🔥 Firebase user:', user.uid, '| name:', user.displayName || '(нет)');
+    hideLoginOverlay();
 
-    // Слушаем свой документ в Firestore
     if(fbUnsubscribe) fbUnsubscribe();
     fbUnsubscribe = fbDb.collection('users').doc(user.uid).onSnapshot(
       (doc) => {
@@ -253,7 +256,6 @@ fbAuth.onAuthStateChanged(async (user) => {
           if(cloud && cloud.data){
             const cloudUpdated = cloud.updatedAt ? cloud.updatedAt.toMillis() : 0;
             const localUpdated = state._lastUpdated || 0;
-            // Берём облако, если оно свежее
             if(cloudUpdated >= localUpdated){
               state = migrate(cloud.data);
               state._lastUpdated = cloudUpdated;
@@ -266,8 +268,7 @@ fbAuth.onAuthStateChanged(async (user) => {
       },
       (err) => console.warn('Firestore listen error:', err)
     );
-  }
-});
+  });
 }catch(e){
   console.warn(' init failed', e);
 }
@@ -343,6 +344,63 @@ function saveState(){
       }).catch(e => console.warn('Firebase save error:', e));
     }
   }catch(e){ console.warn(e); }
+}
+  
+/* ============================================================
+   LOGIN OVERLAY (Google Sign-In)
+============================================================ */
+function showLoginOverlay(){
+  if(document.getElementById('loginOverlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'loginOverlay';
+  overlay.style.cssText = `
+    position:fixed;inset:0;background:rgba(11,18,32,.95);z-index:9999;
+    display:flex;align-items:center;justify-content:center;padding:1rem;
+  `;
+  overlay.innerHTML = `
+    <div style="background:var(--card);border-radius:16px;padding:2rem 1.5rem;max-width:400px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+      <div style="font-size:3rem;margin-bottom:.5rem">💰</div>
+      <h2 style="margin:0 0 .3rem;font-size:1.3rem">Трекер долгов</h2>
+      <p class="muted small" style="margin:0 0 1.5rem">Войди, чтобы синхронизировать данные между устройствами</p>
+      <button id="googleSignInBtn" style="
+        display:flex;align-items:center;justify-content:center;gap:.6rem;
+        width:100%;padding:.8rem 1rem;border:1px solid var(--border);
+        border-radius:10px;background:#fff;color:#1f1f1f;font-weight:600;
+        font-size:1rem;cursor:pointer;font-family:inherit;
+      ">
+        <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.5 0 10.5-2.1 14.3-5.5l-6.6-5.4C29.7 34.9 27 36 24 36c-5.2 0-9.7-3.3-11.3-8l-6.5 5C9.6 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.3 5.6l6.6 5.4C42 35.5 44 30.2 44 24c0-1.3-.1-2.3-.4-3.5z"/></svg>
+        Войти через Google
+      </button>
+      <p class="muted small" style="margin:1rem 0 0;font-size:.75rem">Данные хранятся в твоём Firebase. Никто кроме тебя их не увидит.</p>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const lb = document.getElementById('logoutBtn');
+  if(lb) lb.style.display = 'none';
+
+  document.getElementById('googleSignInBtn').onclick = async () => {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    try{
+      await fbAuth.signInWithPopup(provider);
+    }catch(e){
+      if(e.code === 'auth/popup-blocked' || e.code === 'auth/popup-closed-by-user'){
+        try{
+          await fbAuth.signInWithRedirect(provider);
+        }catch(e2){
+          alert('Не удалось войти: ' + e2.message);
+        }
+      } else {
+        alert('Ошибка входа: ' + e.message);
+      }
+    }
+  };
+}
+
+function hideLoginOverlay(){
+  const el = document.getElementById('loginOverlay');
+  if(el) el.remove();
+  const lb = document.getElementById('logoutBtn');
+  if(lb) lb.style.display = '';
 }
 function migrate(s){
   const d = structuredClone(DEFAULT_STATE);
@@ -1808,7 +1866,13 @@ function applyTheme(t){
   saveState();
 }
 $('#themeBtn').addEventListener('click', ()=>{ applyTheme(state.settings.theme === 'dark' ? 'light' : 'dark'); });
-
+$('#logoutBtn').addEventListener('click', async ()=>{
+  if(!confirm('Выйти из аккаунта? Данные останутся в облаке.')) return;
+  try{
+    await fbAuth.signOut();
+    location.reload();
+  }catch(e){ alert('Ошибка: ' + e.message); }
+});
 $('#exportBtn').addEventListener('click', ()=>{
   const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
   const a = document.createElement('a');
