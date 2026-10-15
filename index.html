@@ -235,14 +235,15 @@ try{
   firebase.initializeApp(firebaseConfig);
   fbAuth = firebase.auth();
   fbDb = firebase.firestore();
-
   fbAuth.onAuthStateChanged(async (user) => {
+    if(user && user.isAnonymous){
+      try{ await fbAuth.signOut(); }catch(e){}
+      return;
+    }
     if(!user){
-      // Показываем экран входа
       showLoginOverlay();
       return;
     }
-    // Успешный вход
     fbUser = user;
     fbReady = true;
     console.log('🔥 Firebase user:', user.uid, '| name:', user.displayName || '(нет)');
