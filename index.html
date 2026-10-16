@@ -292,19 +292,17 @@ try{
 
   const LS_KEY = 'debt_standup_tracker_v5';
 const DEFAULT_STATE = {
-  version: 5,
-  debts: [
+  version: 6,
+    debts: [
     { id:'lawyers', name:'Юристы (через друга)', initial:47000, current:47000, rate:0, minPayment:0, dueDay:null, statementDay:null, priority:1, color:'#dc2626', note:'Не затягивать — отношения' },
-    { id:'cc400',   name:'Кредитка 400к (+16к)', initial:416000, current:416000, rate:0, minPayment:0, dueDay:26, statementDay:2, priority:2, color:'#2563eb', note:'Грейс: выписка 2-го, закрыть до 26-го. В этом цикле цель = 416к',
-      churn: { enabled:true, coveredAmount:0, rounds:[], cycleStart:null, avgRound:50000 } },
-    { id:'loan',    name:'Кредит наличными 40%', initial:50000, current:50000, rate:40, minPayment:1938, dueDay:21, statementDay:null, priority:3, color:'#b91c1c', note:'Осталось 55 платежей, платёж 21-го (перенесён с 16-го)' },
-    { id:'cc255',   name:'Кредитка 255к',        initial:255000, current:255000, rate:0, minPayment:0, dueDay:11, statementDay:16, priority:4, color:'#f59e0b', note:'Мин. платёж 11-го (перенесён с 9-го)',
-      churn: { enabled:true, coveredAmount:0, rounds:[], cycleStart:null, avgRound:50000 } },
-    { id:'father',  name:'Отец',                 initial:50000, current:50000, rate:0, minPayment:0, dueDay:null, statementDay:null, priority:5, color:'#6366f1', note:'Последним' }
-  ],
-  oneTime: [
-    { id:'deposit',  name:'Залог за квартиру (1/2)', amount:35000 },
-    { id:'deposit2', name:'Залог за квартиру (2/2)', amount:35000 }
+    { id:'loan',    name:'Кредит 40% (Моор)', initial:50124, current:50124, rate:40, minPayment:2010, dueDay:16, statementDay:null, priority:2, color:'#b91c1c', note:'Дог. 0108915634 · 60 мес · платёж 16-го · переплата ~68к' },
+    { id:'cc400',   name:'Кредитка 400к (Харина)', initial:415849, current:415865, rate:0.72, minPayment:23089, dueDay:26, statementDay:2, priority:3, color:'#2563eb', note:'Грейс сорван · 8,22 ₽/день · остановить = 415 848,58 ₽',
+      dailyInterest:8.22, baseAmount:415848.58, baseDate:'2026-10-16',
+      churn:{ enabled:true, coveredAmount:0, rounds:[], cycleStart:null, avgRound:50000 } },
+    { id:'cc255',   name:'Кредитка 255к (Моор)', initial:255000, current:225299, rate:0, minPayment:600, dueDay:11, statementDay:16, priority:4, color:'#f59e0b', note:'Дог. 0433430471 · грейс 55 дн. · при срыве 47%',
+      churn:{ enabled:true, coveredAmount:0, rounds:[], cycleStart:null, avgRound:50000 } },
+    { id:'father',  name:'Отец', initial:50000, current:50000, rate:0, minPayment:0, dueDay:null, statementDay:null, priority:5, color:'#6366f1', note:'Как получится' },
+    { id:'alfa',    name:'Альфа 20к (Моор)', initial:19480, current:19480, rate:58.99, minPayment:600, dueDay:13, statementDay:null, priority:6, color:'#ef4444', note:'58,99% · грейс до 03.12.2026 · страховка отключена' }
   ],
   payments: [],
   shifts: [],
@@ -322,6 +320,7 @@ const DEFAULT_STATE = {
       { id:'phone',     name:'Связь/подписки',      amount:2000  },
       { id:'home',      name:'Быт/прочее',          amount:3000  },
       { id:'standup',   name:'Стендап (дорога 130₽)', amount:2000 },
+      { id:'pro',       name:'Т-Банк Pro (400к)',   amount:299   },
       { id:'cushion',   name:'Подушка',             amount:5000  }
     ]
   },
@@ -427,6 +426,14 @@ function migrate(s){
   out.standup  = { ...d.standup,  ...(s.standup  || {}) };
   ['debts','payments','shifts','notes','oneTime','spends','screens'].forEach(k=>{ if(!Array.isArray(out[k])) out[k] = d[k] || []; });
   if(typeof out.balances !== 'object' || !out.balances) out.balances = {};
+
+  const sv = Number(s.version || 0);
+  if(sv < 6){
+    out.debts = structuredClone(d.debts);
+    out.budget.expenses = structuredClone(d.budget.expenses);
+    out.version = 6;
+  }
+
   ['cc400','cc255'].forEach(id=>{
     const dd = out.debts.find(x=>x.id===id);
     if(dd && !dd.churn) dd.churn = { enabled:true, coveredAmount:0, rounds:[], cycleStart:null, avgRound:50000 };
