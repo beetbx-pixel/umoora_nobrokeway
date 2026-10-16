@@ -736,7 +736,7 @@ function churnInfo(debt){
   return {
     goal, covered, remaining, rounds, avgRound,
     daysLeft, safeDays, roundsRemaining, perDayNeeded,
-    progress,
+    progress, byOzon, byWb,
     cycleStart: debt.churn.cycleStart
   };
 }
@@ -838,11 +838,14 @@ function renderChurnBlock(d){
   const i = churnInfo(d);
   if(!i) return '';
   const closed = i.remaining <= 0;
-  const roundsList = (i.rounds || []).slice().reverse().slice(0, 6).map(r => `
+    const roundsList = (i.rounds || []).slice().reverse().slice(0, 6).map(r => {
+    const tool = r.tool === 'wb' ? '🟣 WB' : '🔵 Ozon';
+    return `
     <div class="row" style="justify-content:space-between;padding:.3rem 0;border-bottom:1px solid var(--border)">
-      <span class="muted small">${new Date(r.date).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}${r.note?' · '+esc(r.note):''}</span>
+      <span class="muted small">${new Date(r.date).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})} · ${tool}${r.note?' · '+esc(r.note):''}</span>
       <span><b>${fmtN(r.amount)} ₽</b> <button class="btn ghost sm" onclick="removeChurnRound('${d.id}','${r.id}')">✕</button></span>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   return `
     <div class="churn-box">
