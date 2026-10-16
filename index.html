@@ -305,6 +305,7 @@ const DEFAULT_STATE = {
     { id:'alfa',    name:'Альфа 20к (Моор)', initial:19480, current:19480, rate:58.99, minPayment:600, dueDay:13, statementDay:null, priority:6, color:'#ef4444', note:'58,99% · грейс до 03.12.2026 · страховка отключена' }
   ],
   payments: [],
+  reserve: { balance: 0, log: [] },
   shifts: [],
   notes: [],
   balances: {},
@@ -426,7 +427,8 @@ function migrate(s){
   out.standup  = { ...d.standup,  ...(s.standup  || {}) };
   ['debts','payments','shifts','notes','oneTime','spends','screens'].forEach(k=>{ if(!Array.isArray(out[k])) out[k] = d[k] || []; });
   if(typeof out.balances !== 'object' || !out.balances) out.balances = {};
-
+  if(!out.reserve || typeof out.reserve !== 'object') out.reserve = { balance: 0, log: [] };
+  if(!Array.isArray(out.reserve.log)) out.reserve.log = [];
   const sv = Number(s.version || 0);
   if(sv < 6){
     out.debts = structuredClone(d.debts);
@@ -855,7 +857,137 @@ function renderChurnBlock(d){
       `}
     </div>`;
 }
+/* ============================================================
+   RESERVE (резерв для стяга)
+============================================================ */
+function renderReserve(){
+  const r = state.reserve || { balance: 0, log: [] };
+  const recent = r.log.slice(-8).reverse();
+  const logHtml = recent.length ? recent.map(op => `
+    <div class="row" style="justify-content:space-between;padding:.35rem 0;border-bottom:1px solid var(--border)">
+      <span class="muted small">
+        ${new Date(op.date).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}
+        ${op.type === 'in' ? '⬆ пополнение' : '⬇ ' + esc(op.target || '—')}
+        ${op.note ? ' · ' + esc(op.note) : ''}
+      </span>
+      <span style="color:${op.type === 'in' ? 'var(--p2)' : 'var(--p3)'}">
+        <b>${op.type === 'in' ? '+' : '−'}${fmtN(op.amount)} ₽</b>
+      </span>
+    </div>`).join('') : '<div class="muted small">Операций нет</div>';
 
+  return `
+    <div class="card">
+      <h3>💼 Резерв для стяга</h3>
+      <div class="hero-value" style="color:var(--p2);font-size:1.8rem">${fmt(r.balance)}</div>
+      <div class="muted small" style="margin-bottom:.7rem">Свободные деньги на отдельном счёте. Отсюда закидываешь на кредитки.</div>
+      <div class="row">
+        <button class="btn primary sm" onclick="addReserveIncome()">+ Пополнить</button>
+        <button class="btn warn sm" onclick="addReserveTransfer()">− Перевести на кредитку</button>
+      </div>
+      ${recent.length ? `<div style="margin-top:.8rem"><div class="muted small" style="margin-bottom:.3rem"><b>История</b></div>${logHtml}</div>` : ''}
+    </div>`;
+}
+
+function addReserveIncome(){
+  openModal({
+    title: 'Пополнить резерв',
+    body: `
+      <label>Сумма, ₽</label>
+      <input type="number" name="amount" value="10000" min="1" required autofocus>
+      <label>Заметка</label>
+      <input name="note" placeholder="ЗП, подработка…">
+    `,
+    submitText: 'Пополнить',
+    onSubmit: data => {
+      const amt = Number(data.amount);
+      if(!amt || amt <= 0) return false;
+      state.reserve.balance += amt;
+      state.reserve.log.push({
+        id: 'r_'+Date.now(),
+        date: new Date().toISOString(),
+        type: 'in',
+        amount: amt,
+        note: data.note || ''
+      });
+      saveState(); renderAll();
+      toast(`Резерв +${fmt(amt)}`);
+    }
+  });
+}
+
+function addReserveTransfer(){
+  const active = state.debts.filter(d => d.current > 0);
+  if(!active.length){ toast('Нет активных долгов', 'err'); return; }
+  openModal({
+    title: 'Перевести из резерва',
+    body: `
+      <label>На какой долг</label>
+      <select name="debtId">
+        ${active.map(d => `<option value="${d.id}">${esc(d.name)} — ${fmt(dynCurrent(d))}</option>`).join('')}
+      </select>
+      <label>Сумма, ₽</label>
+      <input type="number" name="amount" value="${Math.min(50000, Math.round(state.reserve.balance))}" min="1" required>
+      <label>Заметка</label>
+      <input name="note" placeholder="Прокрутка">
+    `,
+    submitText: 'Перевести',
+    onSubmit: data => {
+      const amt = Number(data.amount);
+      if(!amt || amt <= 0) return false;
+      if(amt > state.reserve.balance){ toast('Больше, чем в резерве', 'err'); return false; }
+      const d = state.debts.find(x => x.id === data.debtId);
+      if(!d){ toast('Долг не найден', 'err'); return false; }
+
+      state.reserve.balance -= amt;
+
+      const before = dynCurrent(d);
+      const after = Math.max(0, before - amt);
+      if(d.dailyRate && d.baseDate){
+        if(after <= 1){
+          d.baseAmount = 0;
+          d.baseDate = new Date().toISOString().slice(0,10);
+          d.dailyRate = 0;
+          d.note = (d.note || '') + ' · ✅ грейс восстановлен';
+        } else {
+          d.baseAmount = after;
+          d.baseDate = new Date().toISOString().slice(0,10);
+        }
+      }
+      d.current = after;
+
+      let markedCycle = null;
+      if(d.dueDay){
+        let due = new Date();
+        due.setDate(d.dueDay);
+        due.setHours(0,0,0,0);
+        if(due < today()) due.setMonth(due.getMonth()+1);
+        markedCycle = due.toISOString().slice(0,10);
+        d.paidCycles = d.paidCycles || [];
+        if(!d.paidCycles.includes(markedCycle)) d.paidCycles.push(markedCycle);
+      }
+
+      state.reserve.log.push({
+        id: 'r_'+Date.now(),
+        date: new Date().toISOString(),
+        type: 'out',
+        amount: amt,
+        target: d.name,
+        note: data.note || ''
+      });
+      state.payments.push({
+        id: 'p_'+Date.now(),
+        debtId: d.id,
+        amount: amt,
+        date: new Date().toISOString(),
+        note: (data.note || '') + ' (из резерва)',
+        paidCycle: markedCycle
+      });
+
+      saveState(); renderAll();
+      toast(`Переведено ${fmt(amt)} → «${d.name}»`);
+    }
+  });
+}
 function churnBanner(){
   const now = new Date();
   const banners = [];
@@ -906,7 +1038,9 @@ function renderOverview(){
       <div class="hero-sub">из ${fmt(initial)} · закрыто ${pct.toFixed(1)}%</div>
       <div class="progress"><div class="progress-fill" style="width:${Math.max(2,pct)}%"></div></div>
     </div>
-
+    
+    ${renderReserve()}
+    
     <div class="stats-grid">
       <div class="stat"><div class="stat-num" style="color:var(--p2)">${fmt(paid)}</div><div class="stat-lbl">Выплачено</div></div>
       <div class="stat"><div class="stat-num" style="color:var(--p1)">${monthsToText(months)}</div><div class="stat-lbl">До нуля</div></div>
