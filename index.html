@@ -726,6 +726,8 @@ function churnInfo(debt){
   const avgRound = rounds.length
     ? rounds.reduce((s,r)=>s+r.amount,0)/rounds.length
     : (debt.churn.avgRound || 50000);
+  const byOzon = rounds.filter(r => (r.tool || 'ozon') === 'ozon').reduce((s,r)=>s+r.amount,0);
+  const byWb   = rounds.filter(r => r.tool === 'wb').reduce((s,r)=>s+r.amount,0);
   const daysLeft = debt.dueDay ? daysUntilThisMonth(debt.dueDay) : null;
   const safeDays = daysLeft != null ? Math.max(1, daysLeft - 3) : null;
   const roundsRemaining = Math.ceil(remaining / Math.max(avgRound,1));
@@ -743,10 +745,22 @@ function addChurnRound(debtId){
   const d = state.debts.find(x=>x.id===debtId);
   if(!d || !d.churn) return;
   const info = churnInfo(d);
-  openModal({
+    openModal({
     title: 'Новый круг: ' + d.name,
     body: `
-      <div class="muted small">Отметь после того, как Озон вернёт деньги.</div>
+      <div class="muted small">Отметь после того, как деньги вернулись (Ozon) или ушли в WB-кошелёк.</div>
+      <label>Инструмент</label>
+      <div class="row" style="margin-bottom:.3rem">
+        <label class="check" style="flex:1;padding:.4rem;border:1px solid var(--border);border-radius:10px">
+          <input type="radio" name="tool" value="ozon" checked onchange="document.getElementById('roundHint').textContent='Ozon: деньги вернутся на карту, лимит восстановится'">
+          Ozon
+        </label>
+        <label class="check" style="flex:1;padding:.4rem;border:1px solid var(--border);border-radius:10px">
+          <input type="radio" name="tool" value="wb" onchange="document.getElementById('roundHint').textContent='WB: деньги уйдут в WB-кошелёк, надо выводить'">
+          WB
+        </label>
+      </div>
+      <div id="roundHint" class="muted small" style="margin-bottom:.4rem">Ozon: деньги вернутся на карту, лимит восстановится</div>
       <label>Сумма круга, ₽</label>
       <input type="number" name="amount" value="${Math.round(info?.avgRound || 50000)}" min="1" required autofocus>
       <div class="row" style="margin-top:.6rem">
@@ -755,10 +769,10 @@ function addChurnRound(debtId){
         <button type="button" class="btn ghost sm" onclick="this.form.amount.value=70000">70к</button>
       </div>
       <label>Заметка</label>
-      <input name="note" placeholder="Озон, корзина №...">
+      <input name="note" placeholder="Корзина №...">
     `,
     submitText: 'Записать круг',
-    onSubmit: data => {
+        onSubmit: data => {
       const amt = Number(data.amount);
       if(!amt || amt <= 0) return false;
       if(!d.churn.rounds) d.churn.rounds = [];
@@ -766,13 +780,15 @@ function addChurnRound(debtId){
         id: 'c_'+Date.now(),
         date: new Date().toISOString(),
         amount: amt,
+        tool: data.tool || 'ozon',
         note: data.note || ''
       });
       d.churn.coveredAmount = (d.churn.coveredAmount || 0) + amt;
       if(!d.churn.cycleStart) d.churn.cycleStart = new Date().toISOString();
       saveState(); renderAll();
       const ni = churnInfo(d);
-      toast(`Круг ${fmtN(amt)} ₽ · осталось ${fmtN(ni.remaining)} ₽`);
+      const toolLabel = data.tool === 'wb' ? 'WB' : 'Ozon';
+      toast(`${toolLabel}-круг ${fmtN(amt)} ₽ · осталось ${fmtN(ni.remaining)} ₽`);
     }
   });
 }
@@ -844,6 +860,12 @@ function renderChurnBlock(d){
           Осталось: <b>${fmtN(i.remaining)} ₽</b>
           ${i.avgRound ? ` (~${i.roundsRemaining} ${plural(i.roundsRemaining,'круг','круга','кругов')} по ${fmtN(i.avgRound)} ₽)` : ''}
         </div>
+                ${(i.byOzon || i.byWb) ? `
+          <div class="muted small" style="margin-top:.2rem">
+            ${i.byOzon ? `🔵 Ozon: <b>${fmtN(i.byOzon)} ₽</b>` : ''}
+            ${i.byOzon && i.byWb ? ' · ' : ''}
+            ${i.byWb ? `🟣 WB: <b>${fmtN(i.byWb)} ₽</b> <span style="color:var(--p3)">(в кошельке)</span>` : ''}
+          </div>` : ''}
         ${i.daysLeft != null ? `
           <div class="muted small" style="margin-top:.2rem">
             До дедлайна: <b>${i.daysLeft} ${plural(i.daysLeft,'день','дня','дней')}</b>
