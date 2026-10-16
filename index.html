@@ -297,7 +297,7 @@ const DEFAULT_STATE = {
     { id:'lawyers', name:'Юристы (через друга)', initial:47000, current:47000, rate:0, minPayment:0, dueDay:null, statementDay:null, priority:1, color:'#dc2626', note:'Не затягивать — отношения' },
     { id:'loan',    name:'Кредит 40% (Моор)', initial:50124, current:50124, rate:40, minPayment:2010, dueDay:16, statementDay:null, priority:2, color:'#b91c1c', note:'Дог. 0108915634 · 60 мес · платёж 16-го · переплата ~68к' },
     { id:'cc400',   name:'Кредитка 400к (Харина)', initial:415849, current:415865, rate:0.72, minPayment:23089, dueDay:26, statementDay:2, priority:3, color:'#2563eb', note:'Грейс сорван · 8,22 ₽/день · остановить = 415 848,58 ₽',
-      dailyInterest:8.22, baseAmount:415848.58, baseDate:'2026-10-16',
+      dailyRate:0.000019767, baseAmount:415848.58, baseDate:'2026-10-16',
       churn:{ enabled:true, coveredAmount:0, rounds:[], cycleStart:null, avgRound:50000 } },
     { id:'cc255',   name:'Кредитка 255к (Моор)', initial:255000, current:225299, rate:0, minPayment:600, dueDay:11, statementDay:16, priority:4, color:'#f59e0b', note:'Дог. 0433430471 · грейс 55 дн. · при срыве 47%',
       churn:{ enabled:true, coveredAmount:0, rounds:[], cycleStart:null, avgRound:50000 } },
@@ -617,12 +617,18 @@ function toast(msg, type='ok'){
 /* ============================================================
    CALCULATIONS
 ============================================================ */
-const totalCurrent = () => state.debts.reduce((s,d)=>s+d.current,0);
+const totalCurrent = () => state.debts.reduce((s,d)=>s+dynCurrent(d),0);
 const totalInitial = () => state.debts.reduce((s,d)=>s+d.initial,0);
 const totalPaid    = () => Math.max(0, totalInitial() - totalCurrent());
 const monthlyExpenses = () => state.budget.expenses.reduce((s,e)=>s+Number(e.amount||0),0);
 const monthlyAvailable = () => Math.max(0, state.budget.monthlyIncome - monthlyExpenses());
 const dailyLimit = () => (state.settings.maxLifeBudget || 0) / 30;
+  function dynCurrent(d){
+  if(!d || !d.dailyRate || !d.baseDate || !d.baseAmount) return d ? d.current : 0;
+  const base = new Date(d.baseDate); base.setHours(0,0,0,0);
+  const days = Math.max(0, Math.floor((today() - base) / 86400000));
+  return d.baseAmount * (1 + days * d.dailyRate);
+}
 
 function projectSeries(monthlyPayment){
   let list = state.debts.filter(d=>d.current>0).map(d=>({...d}));
@@ -661,23 +667,29 @@ function upcomingEvents(days = 90){
   const end = new Date(start); end.setDate(end.getDate()+days);
   const lead = state.settings.reminderLeadDays || 5;
 
-  state.debts.forEach(d=>{
+    state.debts.forEach(d=>{
     if(d.current <= 0) return;
+    const paidCycles = d.paidCycles || [];
     if(d.dueDay){
       let due = new Date(start.getFullYear(), start.getMonth(), d.dueDay);
       if(due < start) due.setMonth(due.getMonth()+1);
       while(due <= end){
-        const rem = new Date(due); rem.setDate(rem.getDate() - lead);
-        if(rem >= start){
-          events.push({ date: new Date(rem), title: `Напоминание: ${d.name} через ${lead} дн.`, cls: 'c-reminder', type:'reminder' });
+        const dateStr = due.toISOString().slice(0,10);
+        if(!paidCycles.includes(dateStr)){
+          const rem = new Date(due); rem.setDate(rem.getDate() - lead);
+          if(rem >= start){
+            events.push({ date: new Date(rem), title: `Напоминание: ${d.name} через ${lead} дн.`, cls: 'c-reminder', type:'reminder', debtId:d.id, dueDate: dateStr });
+          }
+          const dd = daysUntil(due);
+          events.push({
+            date: new Date(due),
+            title: `${d.minPayment ? 'Мин. платёж' : 'Платёж'}: ${d.name}`,
+            cls: dd <= 3 ? 'c-risk' : 'c-payment',
+            type:'payment',
+            debtId: d.id,
+            dueDate: dateStr
+          });
         }
-        const dd = daysUntil(due);
-        events.push({
-          date: new Date(due),
-          title: `${d.minPayment ? 'Мин. платёж' : 'Платёж'}: ${d.name}`,
-          cls: dd <= 3 ? 'c-risk' : 'c-payment',
-          type:'payment'
-        });
         due = new Date(due); due.setMonth(due.getMonth()+1);
       }
     }
@@ -904,16 +916,18 @@ function renderOverview(){
 
     ${churnBanner()}
 
-    ${next ? (() => {
+        ${next ? (() => {
       const dd = daysUntil(next.date);
       const urgent = dd <= 3 && next.type === 'payment';
+      const canPay = next.type === 'payment' && next.debtId;
       return `
         <div class="card alert ${urgent?'risk':''}">
           <div class="alert-icon">${urgent?'🚨':'⏰'}</div>
-          <div>
+          <div style="flex:1;min-width:0">
             <div class="alert-title">${esc(next.title)}</div>
             <div class="alert-sub">${fmtDate(next.date)} · ${dd>0?`через ${dd} ${plural(dd,'день','дня','дней')}`:dd===0?'сегодня':'просрочено'}</div>
           </div>
+          ${canPay ? `<button class="btn primary sm" onclick="openPayModal('${next.debtId}')">Внести</button>` : ''}
         </div>`;
     })() : ''}
 
@@ -950,7 +964,7 @@ function renderOverview(){
       <h3>Рекомендуемые даты платежей</h3>
       <div class="muted small">Под ЗП 10 и 20 числа:</div>
       <div class="cal-item"><div class="cal-date c-reminder"><div class="d">11</div><div class="m">число</div></div><div class="cal-body"><div class="cal-title">Кредитка 255к</div><div class="cal-sub">Мин. платёж — после ЗП 10-го</div></div></div>
-      <div class="cal-item"><div class="cal-date c-payment"><div class="d">21</div><div class="m">число</div></div><div class="cal-body"><div class="cal-title">Кредит 40%</div><div class="cal-sub">После ЗП 20-го (перенесён с 16-го)</div></div></div>
+            <div class="cal-item"><div class="cal-date c-payment"><div class="d">16</div><div class="m">число</div></div><div class="cal-body"><div class="cal-title">Кредит 40%</div><div class="cal-sub">Мин. платёж 16-го · после ЗП 10-го</div></div></div>
       <div class="cal-item"><div class="cal-date c-risk"><div class="d">26</div><div class="m">число</div></div><div class="cal-body"><div class="cal-title">Кредитка 400к</div><div class="cal-sub">Закрытие грейса — есть 5 дней на добивку</div></div></div>
     </div>
   `;
@@ -1669,17 +1683,45 @@ function openPayModal(debtId){
       <input name="note" placeholder="Например: с ЗП">
     `,
     submitText: 'Внести',
-    onSubmit: data => {
+        onSubmit: data => {
       const amt = Number(data.amount);
       if(!amt || amt<=0) return false;
-      d.current = Math.max(0, d.current - amt);
+
+      const before = dynCurrent(d);
+      const after = Math.max(0, before - amt);
+
+      if(d.dailyRate && d.baseDate){
+        if(after <= 1){
+          d.baseAmount = 0;
+          d.baseDate = new Date().toISOString().slice(0,10);
+          d.dailyRate = 0;
+          d.note = (d.note || '') + ' · ✅ грейс восстановлен';
+        } else {
+          d.baseAmount = after;
+          d.baseDate = new Date().toISOString().slice(0,10);
+        }
+      }
+      d.current = after;
+
+      let markedCycle = null;
+      if(d.dueDay){
+        let due = new Date();
+        due.setDate(d.dueDay);
+        due.setHours(0,0,0,0);
+        if(due < today()) due.setMonth(due.getMonth()+1);
+        markedCycle = due.toISOString().slice(0,10);
+        d.paidCycles = d.paidCycles || [];
+        if(!d.paidCycles.includes(markedCycle)) d.paidCycles.push(markedCycle);
+      }
+
       state.payments.push({
         id: 'p_'+Date.now(), debtId: d.id, amount: amt,
-        date: new Date().toISOString(), note: data.note||''
+        date: new Date().toISOString(), note: data.note||'',
+        paidCycle: markedCycle
       });
       saveState(); renderAll();
       toast(`Платёж ${fmt(amt)} по «${d.name}»`);
-    }
+    }В
   });
 }
 
@@ -1688,7 +1730,13 @@ function undoPayment(paymentId){
   if(!p) return;
   if(!confirm(`Отменить платёж ${fmt(p.amount)}?`)) return;
   const d = state.debts.find(x=>x.id===p.debtId);
-  if(d) d.current = Math.min(d.initial, d.current + p.amount);
+  if(d){
+    d.current = Math.min(d.initial, d.current + p.amount);
+    if(d.dailyRate && d.baseDate) d.baseAmount = d.current;
+    if(p.paidCycle && Array.isArray(d.paidCycles)){
+      d.paidCycles = d.paidCycles.filter(c => c !== p.paidCycle);
+    }
+  }
   state.payments = state.payments.filter(x=>x.id!==paymentId);
   saveState(); renderAll();
   toast('Платёж отменён', 'err');
