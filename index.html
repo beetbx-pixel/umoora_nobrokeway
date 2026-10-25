@@ -404,6 +404,10 @@ function loadState(){
 async function requestNotifications(){
   try {
     const messaging = firebase.messaging();
+        // Регистрируем sw.js
+    if ('serviceWorker' in navigator) {
+      await navigator.serviceWorker.register('/umoora_nobrokeway/sw.js');
+    }
     const permission = await Notification.requestPermission();
     
     if (permission === 'granted') {
