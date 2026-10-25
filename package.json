@@ -1,0 +1,9 @@
+{
+  "name": "umoora-reminder-bot",
+  "version": "1.0.0",
+  "description": "Push notifications for debt tracker",
+  "main": "send-notifications.js",
+  "dependencies": {
+    "firebase-admin": "^11.10.1"
+  }
+}
