@@ -36,19 +36,34 @@ async function checkDebtsAndNotify() {
 
         const daysUntil = Math.round((due - today) / 86400000);
         
-        // Если сегодня ровно тот день, когда нужно напомнить
-        if (daysUntil === leadDays) {
+                // Если осталось от 0 до 5 дней (включительно) — отправляем пуш
+        if (daysUntil <= leadDays && daysUntil >= 0) {
           const amount = Math.round(d.minPayment || d.current);
+          
+          // Красиво склоняем слова
+          let daysText = '';
+          if (daysUntil === 0) {
+            daysText = 'Сегодня';
+          } else if (daysUntil === 1) {
+            daysText = 'Завтра';
+          } else {
+            const m10 = daysUntil % 10, m100 = daysUntil % 100;
+            let word = 'дней';
+            if (m10 === 1 && m100 !== 11) word = 'день';
+            else if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) word = 'дня';
+            daysText = `Через ${daysUntil} ${word}`;
+          }
+
           const message = {
             token: state.fcmToken,
             notification: {
               title: '🔔 Скоро платёж!',
-              body: `Через ${leadDays} дн. нужно внести ~${amount.toLocaleString('ru-RU')} ₽ по долгу «${d.name}».`
+              body: `${daysText} нужно внести ~${amount.toLocaleString('ru-RU')} ₽ по долгу «${d.name}».`
             }
           };
 
           await admin.messaging().send(message);
-          console.log(`Уведомление отправлено по долгу: ${d.name}`);
+          console.log(`Уведомление отправлено по долгу: ${d.name} (осталось дней: ${daysUntil})`);
         }
       }
     }
