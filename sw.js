@@ -6,9 +6,14 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
+  self.skipWaiting(); // Заставляет новый SW активироваться сразу
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
   );
+});
+
+self.addEventListener('activate', (e) => {
+  e.waitUntil(clients.claim()); // Захватывает контроль над страницей
 });
 
 self.addEventListener('fetch', (e) => {
