@@ -718,6 +718,15 @@ function upcomingEvents(days = 90){
 
   state.debts.forEach(d=>{
     if(d.current <= 0) return;
+      state.debts.forEach(d=>{
+    if(d.current <= 0) return;
+    
+    // ДОБАВИТЬ ВОТ ЭТУ СТРОКУ:
+    if(d.churn && d.churn.coveredAmount >= d.current) return;
+    
+    const paidCycles = d.paidCycles || [];
+    if(d.dueDay){
+      // ... дальше твой код
     const paidCycles = d.paidCycles || [];
     if(d.dueDay){
       let due = new Date(start.getFullYear(), start.getMonth(), d.dueDay);
