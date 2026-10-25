@@ -548,66 +548,39 @@ async function idbDelete(id){
 function parseOCRText(text){
   const result = { balances: [], spends: [] };
   if(!text) return result;
-  const lines = text.split(/\n+/).map(l=>l.trim()).filter(Boolean);
 
-  const balanceRx = /(?:доступно|баланс|остаток|итого|к оплате|платинум)[^\d]{0,20}([\d\s]{3,15}[.,]?\d{0,2})\s*(?:₽|руб|р\.?|Р)/i;
-  const rawAmountRx = /^([\d\s]{3,15}[.,]\d{2})\s*(?:₽|руб|р\.?|Р)$/i;
-  const spendRx   = /[-−]\s*([\d\s]{2,12}[.,]?\d{0,2})\s*(?:₽|руб|р\.)/;
-  const incomeRx  = /[+]\s*([\d\s]{2,12}[.,]?\d{0,2})\s*(?:₽|руб|р\.)/;
+  // Убираем переносы строк, чтобы искать в сплошном тексте
+  const flatText = text.replace(/\n/g, ' ');
 
-  const cardKeywords = [
-    { id:'cc400',   keys:['400','416','тин','tinkoff'] },
-    { id:'cc255',   keys:['255','тин','tinkoff'] },
-    { id:'loan',    keys:['кредит','наличн','40%'] },
-    { id:'lawyers', keys:['юрист','друг'] },
-    { id:'father',  keys:['отец','папа'] }
-  ];
+  // Ищем все транзакции (+ и -). Ловим как ₽, так и буквы P/Р, которые выдает OCR
+  const txRx = /([+−-])\s*([\d\s]{2,12}[.,]?\d{0,2})\s*(?:₽|руб|р\.?|Р|P)/gi;
+  let tm;
+  while ((tm = txRx.exec(flatText)) !== null) {
+    const sign = tm[1];
+    const amountVal = tm[2].replace(/\s/g,'').replace(',','.');
+    let amount = parseFloat(amountVal);
+    if (isNaN(amount) || amount < 1) continue;
 
-  for(const line of lines){
-    let bm = line.match(balanceRx);
-    if(!bm && line.length < 20){
-      const rm = line.match(rawAmountRx);
-      if(rm) bm = rm;
-    }
-    if(bm){
-      const amount = parseFloat(bm[1].replace(/\s/g,'').replace(',','.'));
-      if(!isNaN(amount) && amount > 100){
-        const lower = line.toLowerCase();
-        let matched = null;
-        for(const ck of cardKeywords){
-          if(ck.keys.some(k => lower.includes(k))){ matched = ck.id; break; }
-        }
-        result.balances.push({ cardName: line, amount, matchedDebtId: matched });
-      }
-    }
-        const sm = line.match(spendRx);
-    if(sm){
-      const amount = -parseFloat(sm[1].replace(/\s/g,'').replace(',','.'));
-      if(!isNaN(amount) && Math.abs(amount) > 1){
-        let churnTool = null;
-        if (/(ozon|озон)/i.test(line)) churnTool = 'ozon';
-        else if (/(wildberries|вайлдберриз|вайлдберрис|вб|\bwb\b)/i.test(line)) churnTool = 'wb';
+    if (sign === '-' || sign === '−') amount = -amount;
 
-        result.spends.push({
-          amount,
-          merchant: line.replace(spendRx,'').trim().slice(0,60),
-          category: guessCategory(line),
-          churnTool
-        });
-      }
-    }
-    const im = line.match(incomeRx);
-    if(im){
-      const amount = parseFloat(im[1].replace(/\s/g,'').replace(',','.'));
-      if(!isNaN(amount) && amount > 1){
-        result.spends.push({
-          amount,
-          merchant: line.replace(incomeRx,'').trim().slice(0,60),
-          category: 'other'
-        });
-      }
-    }
+    // Берем кусочек текста перед суммой, чтобы найти название магазина
+    const startIdx = Math.max(0, tm.index - 25);
+    let context = flatText.substring(startIdx, tm.index).trim();
+    
+    let merchant = context.split(' ').filter(Boolean).slice(-2).join(' ');
+    if(!merchant || merchant.length < 2) merchant = 'Операция';
+
+    const isOzon = /ozon|озон/i.test(merchant);
+    const isWb = /wildberries|вайлдберриз|вайлдберрис|вб|\bwb\b/i.test(merchant);
+    
+    result.spends.push({
+      amount,
+      merchant,
+      category: guessCategory(merchant),
+      churnTool: isOzon ? 'ozon' : (isWb ? 'wb' : null)
+    });
   }
+
   return result;
 }
 
