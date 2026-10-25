@@ -274,6 +274,21 @@ let notesTag = '';
 /* ============================================================
    FIREBASE
 ============================================================ */
+  const SHEETS_URL = "https://script.google.com/macros/s/AKfycbxGru--TuJWycbUsE9dIIPJ7aI3qvQkBMHqQhqsyg_eteZj1ltgYVjRB1QuzKBcFDSr/exec";
+
+function sendToSheets(type, debtName, amount, note) {
+  if(!SHEETS_URL) return;
+  const date = new Date().toLocaleString('ru-RU');
+  const rowData = [date, type, debtName, amount, note];
+  
+  // Отправляем данные в Google
+  fetch(SHEETS_URL, {
+    method: 'POST',
+    mode: 'no-cors', 
+    headers: { 'Content-Type': 'text/plain' }, // text/plain чтобы Google не блокировал запрос
+    body: JSON.stringify(rowData)
+  }).catch(e => console.warn('Ошибка отправки в Sheets:', e));
+}
 const firebaseConfig = {
   apiKey: "AIzaSyCO-m8tat9RHhKa5-dlWpanveElBtpfxco",
   authDomain: "nobrokeway.firebaseapp.com",
