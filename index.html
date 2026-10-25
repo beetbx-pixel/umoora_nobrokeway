@@ -1708,7 +1708,23 @@ function addManualBalRow(){
   `;
   container.appendChild(div);
 }
+function applyGlobalCard() {
+  const globalId = document.getElementById('globalCardSelect').value;
+  if(!globalId) {
+    toast('Сначала выбери карту в списке', 'err');
+    return;
+  }
 
+  // Меняем все выпадающие списки балансов
+  const balSelects = document.querySelectorAll('select[name^="balDebt_"]');
+  balSelects.forEach(sel => sel.value = globalId);
+
+  // Меняем все выпадающие списки кругов
+  const churnSelects = document.querySelectorAll('select[name^="churnDebt_"]');
+  churnSelects.forEach(sel => sel.value = globalId);
+
+  toast('Карта применена ко всем операциям ✅');
+}
 function openOcrConfirmModal(meta){
   const p = meta.parsed || { balances:[], spends:[] };
 
@@ -1757,7 +1773,18 @@ function openOcrConfirmModal(meta){
   openModal({
     title: 'Проверь распознанное',
     submitText: 'Применить',
-    body: `
+        body: `
+      <div style="background:var(--bg);padding:.6rem;border-radius:8px;border:1px solid var(--border);margin-bottom:.8rem">
+        <label style="margin-top:0">К какой карте относится этот скрин?</label>
+        <div class="row">
+          <select id="globalCardSelect" style="flex:1">
+            <option value="">— выбери карту —</option>
+            ${state.debts.filter(d=>d.current>0).map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join('')}
+          </select>
+          <button type="button" class="btn ghost sm" onclick="applyGlobalCard()">Применить ко всем</button>
+        </div>
+      </div>
+
       <div class="muted small">Скрин: <b>${esc(meta.name)}</b></div>
 
       <div style="margin-top:.8rem;display:flex;justify-content:space-between;align-items:center">
