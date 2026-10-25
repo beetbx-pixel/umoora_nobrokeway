@@ -420,47 +420,7 @@ function loadState(){
   }catch(e){ console.warn(e); }
   return structuredClone(DEFAULT_STATE);
 }
-async function requestNotifications(){
-  try {
-    if(!firebase.messaging) {
-      await new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js';
-        script.onload = resolve;
-        script.onerror = reject;
-        document.head.appendChild(script);
-      });
-    }
 
-    // 1. Регистрируем наш Service Worker и запоминаем его
-    let swRegistration = null;
-    if ('serviceWorker' in navigator) {
-      swRegistration = await navigator.serviceWorker.register('/umoora_nobrokeway/sw.js');
-    }
-
-    const messaging = firebase.messaging();
-    const permission = await Notification.requestPermission();
-    
-    if (permission === 'granted') {
-      // 2. Передаем Firebase наш зарегистрированный Service Worker
-      const token = await messaging.getToken({ 
-        vapidKey: VAPID_KEY,
-        serviceWorkerRegistration: swRegistration 
-      });
-      
-      if (token) {
-        state.fcmToken = token;
-        saveState();
-        toast('Уведомления включены ✅');
-      }
-    } else {
-      toast('Уведомления отклонены', 'err');
-    }
-  } catch (e) {
-    console.error('Ошибка при запросе пушей:', e);
-    toast('Ошибка: ' + e.message, 'err');
-  }
-}
 function saveState(){
   try{
     state._lastUpdated = Date.now();
@@ -1145,11 +1105,7 @@ function renderOverview(){
       <div class="stat"><div class="stat-num" style="color:${overLimit?'var(--p3)':'var(--p4)'}">${fmtN(todayTotal)} ₽</div><div class="stat-lbl">Потрачено сегодня</div></div>
       <div class="stat"><div class="stat-num" style="color:var(--p4)">${fmtN(avail)} ₽</div><div class="stat-lbl">На долги/мес</div></div>
     </div>
-           <div class="card">
-      <h3>🔔 Уведомления</h3>
-      <div class="muted small" style="margin-bottom:.5rem">Включи, чтобы получать напоминания о платежах за 3-5 дней.</div>
-      <button class="btn primary" style="width:100%" onclick="requestNotifications()">Включить пуши</button>
-    </div>
+           
     ${next ? (() => {
       const dd = daysUntil(next.date);
       const urgent = dd <= 3 && next.type === 'payment';
