@@ -718,15 +718,10 @@ function upcomingEvents(days = 90){
 
   state.debts.forEach(d=>{
     if(d.current <= 0) return;
-      state.debts.forEach(d=>{
-    if(d.current <= 0) return;
     
-    // ДОБАВИТЬ ВОТ ЭТУ СТРОКУ:
+    // Проверка: если грейс закрыт кругами, не показываем напоминание
     if(d.churn && d.churn.coveredAmount >= d.current) return;
-    
-    const paidCycles = d.paidCycles || [];
-    if(d.dueDay){
-      // ... дальше твой код
+
     const paidCycles = d.paidCycles || [];
     if(d.dueDay){
       let due = new Date(start.getFullYear(), start.getMonth(), d.dueDay);
@@ -759,7 +754,9 @@ function upcomingEvents(days = 90){
         st = new Date(st); st.setMonth(st.getMonth()+1);
       }
     }
-  };
+  });
+  return events.sort((a,b)=>a.date-b.date);
+}
   return events.sort((a,b)=>a.date-b.date);
 }
 
