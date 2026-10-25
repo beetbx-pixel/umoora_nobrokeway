@@ -1740,12 +1740,12 @@ function openOcrConfirmModal(meta){
       <button type="button" class="btn ghost sm" onclick="this.parentElement.remove()">✕</button>
     </div>`).join('');
 
-    const spendRows = p.spends.map((s,i)=>{
+  const spendRows = p.spends.map((s,i)=>{
     const isChurnHtml = s.churnTool ? `
       <div style="margin-top:.4rem;padding:.4rem;background:var(--bg);border-radius:8px;border:1px solid var(--p5)">
         <label class="check" style="margin:0;padding:0;font-size:.8rem;display:flex;align-items:center;gap:.4rem">
           <input type="checkbox" name="isChurn_${i}" onchange="document.getElementById('churnSelect_${i}').style.display = this.checked ? 'block' : 'none'; document.getElementById('spAmt_${i}').style.opacity = this.checked ? '0.5' : '1'">
-          🌀 Это круг <b>${s.churnTool === 'wb' ? 'WB' : 'Ozon'}</b>
+          🌀 Это круг <b>${s.churnTool === 'wb' ? 'WB' : 'Ozon'}</b> (${s.amount > 0 ? 'Возврат' : 'Списание'})
         </label>
         <div id="churnSelect_${i}" style="display:none;margin-top:.4rem">
           <select name="churnDebt_${i}" style="font-size:.8rem;padding:.3rem;width:100%">
@@ -1770,10 +1770,11 @@ function openOcrConfirmModal(meta){
       ${isChurnHtml}
     </div>`;
   }).join('');
+
   openModal({
     title: 'Проверь распознанное',
     submitText: 'Применить',
-        body: `
+    body: `
       <div style="background:var(--bg);padding:.6rem;border-radius:8px;border:1px solid var(--border);margin-bottom:.8rem">
         <label style="margin-top:0">К какой карте относится этот скрин?</label>
         <div class="row">
@@ -1796,7 +1797,8 @@ function openOcrConfirmModal(meta){
       </div>
 
       ${spendRows ? `
-        <div style="margin-top:.8rem"><b>💸 Траты</b></div>
+        <div style="margin-top:.8rem"><b>💸 Траты и круги</b></div>
+        <div class="muted small" style="margin-bottom:.5rem;color:var(--p4)">⚠️ Если это круги Ozon/WB, отмечай галочку только на <b>Возврате</b> (положительной сумме), чтобы не задвоить прогресс.</div>
         ${spendRows}
       ` : '<div class="muted small" style="margin-top:.6rem">Траты не найдены</div>'}
 
@@ -1820,7 +1822,7 @@ function openOcrConfirmModal(meta){
         }
       });
 
-            p.spends.forEach((s,i)=>{
+      p.spends.forEach((s,i)=>{
         const m = data[`spMerchant_${i}`];
         const c = data[`spCat_${i}`];
         const a = Number(data[`spAmt_${i}`]);
@@ -1831,6 +1833,7 @@ function openOcrConfirmModal(meta){
           const d = state.debts.find(x => x.id === debtId);
           if(d && d.churn){
             const amt = Math.abs(a);
+            if(!d.churn.rounds) d.churn.rounds = [];
             d.churn.rounds.push({
               id: 'c_ocr_'+Date.now()+'_'+i,
               date: new Date().toISOString(),
@@ -1839,6 +1842,7 @@ function openOcrConfirmModal(meta){
               note: 'Из OCR'
             });
             d.churn.coveredAmount = (d.churn.coveredAmount || 0) + amt;
+            if(!d.churn.cycleStart) d.churn.cycleStart = new Date().toISOString();
             applied++;
           }
         } else if(a){
