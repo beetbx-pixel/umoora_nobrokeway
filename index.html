@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b1220">
 <title>Долги + Стендап — трекер</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
@@ -276,7 +278,8 @@ const firebaseConfig = {
   messagingSenderId: "577683713672",
   appId: "1:577683713672:web:ca7e94188780db93b2393d"
 };
-
+const VAPID_KEY = "BGd7Y6P7qOF6cOreWKP7InqDSjvEsBe1DpBAJlOR95Mff1d0JpGs_NEuj6pMcxdYFm8-aOc9xTeujpZWJv1sBxg;
+  
 let fbAuth = null;
 let fbDb = null;
 let fbUser = null;
@@ -398,7 +401,26 @@ function loadState(){
   }catch(e){ console.warn(e); }
   return structuredClone(DEFAULT_STATE);
 }
-
+async function requestNotifications(){
+  try {
+    const messaging = firebase.messaging();
+    const permission = await Notification.requestPermission();
+    
+    if (permission === 'granted') {
+      const token = await messaging.getToken({ vapidKey: VAPID_KEY });
+      if (token) {
+        state.fcmToken = token;
+        saveState();
+        toast('Уведомления включены ✅');
+      }
+    } else {
+      toast('Уведомления отклонены', 'err');
+    }
+  } catch (e) {
+    console.error('Ошибка при запросе пушей:', e);
+    toast('Ошибка: ' + e.message, 'err');
+  }
+}
 function saveState(){
   try{
     state._lastUpdated = Date.now();
@@ -1096,7 +1118,11 @@ function renderOverview(){
       <div class="stat"><div class="stat-num" style="color:${overLimit?'var(--p3)':'var(--p4)'}">${fmtN(todayTotal)} ₽</div><div class="stat-lbl">Потрачено сегодня</div></div>
       <div class="stat"><div class="stat-num" style="color:var(--p4)">${fmtN(avail)} ₽</div><div class="stat-lbl">На долги/мес</div></div>
     </div>
-
+    <div class="card">
+      <h3>🔔 Уведомления</h3>
+      <div class="muted small" style="margin-bottom:.5rem">Включи, чтобы получать напоминания о платежах за 3-5 дней.</div>
+      <button class="btn primary" style="width:100%" onclick="requestNotifications()">Включить пуши</button>
+    </div>
     ${churnBanner()}
 
     ${next ? (() => {
