@@ -580,14 +580,19 @@ function parseOCRText(text){
         result.balances.push({ cardName: line, amount, matchedDebtId: matched });
       }
     }
-    const sm = line.match(spendRx);
+        const sm = line.match(spendRx);
     if(sm){
       const amount = -parseFloat(sm[1].replace(/\s/g,'').replace(',','.'));
       if(!isNaN(amount) && Math.abs(amount) > 1){
+        let churnTool = null;
+        if (/(ozon|озон)/i.test(line)) churnTool = 'ozon';
+        else if (/(wildberries|вайлдберриз|вайлдберрис|вб|\bwb\b)/i.test(line)) churnTool = 'wb';
+
         result.spends.push({
           amount,
           merchant: line.replace(spendRx,'').trim().slice(0,60),
-          category: guessCategory(line)
+          category: guessCategory(line),
+          churnTool
         });
       }
     }
@@ -1743,18 +1748,36 @@ function openOcrConfirmModal(meta){
       <button type="button" class="btn ghost sm" onclick="this.parentElement.remove()">✕</button>
     </div>`).join('');
 
-  const spendRows = p.spends.map((s,i)=>`
-    <div class="parsed-row">
-      <input name="spMerchant_${i}" value="${esc(s.merchant||'')}" placeholder="магазин" style="flex:1">
-      <select name="spCat_${i}" style="width:120px">
-        ${['food','transport','phone','home','standup','other'].map(c=>`
-          <option value="${c}" ${s.category===c?'selected':''}>${categoryLabel(c)}</option>
-        `).join('')}
-      </select>
-      <input type="number" class="amt" name="spAmt_${i}" value="${Math.round(s.amount)}">
-      <button type="button" class="btn ghost sm" onclick="this.parentElement.remove()">✕</button>
-    </div>`).join('');
+    const spendRows = p.spends.map((s,i)=>{
+    const isChurnHtml = s.churnTool ? `
+      <div style="margin-top:.4rem;padding:.4rem;background:var(--bg);border-radius:8px;border:1px solid var(--p5)">
+        <label class="check" style="margin:0;padding:0;font-size:.8rem;display:flex;align-items:center;gap:.4rem">
+          <input type="checkbox" name="isChurn_${i}" onchange="document.getElementById('churnSelect_${i}').style.display = this.checked ? 'block' : 'none'; document.getElementById('spAmt_${i}').style.opacity = this.checked ? '0.5' : '1'">
+          🌀 Это круг <b>${s.churnTool === 'wb' ? 'WB' : 'Ozon'}</b>
+        </label>
+        <div id="churnSelect_${i}" style="display:none;margin-top:.4rem">
+          <select name="churnDebt_${i}" style="font-size:.8rem;padding:.3rem;width:100%">
+            ${state.debts.filter(d=>d.churn).map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+    ` : '';
 
+    return `
+    <div class="parsed-row" style="flex-direction:column;align-items:stretch;gap:.4rem">
+      <div style="display:flex;gap:.5rem;align-items:center">
+        <input name="spMerchant_${i}" value="${esc(s.merchant||'')}" placeholder="магазин" style="flex:1">
+        <select name="spCat_${i}" style="width:120px">
+          ${['food','transport','phone','home','standup','other'].map(c=>`
+            <option value="${c}" ${s.category===c?'selected':''}>${categoryLabel(c)}</option>
+          `).join('')}
+        </select>
+        <input type="number" class="amt" id="spAmt_${i}" name="spAmt_${i}" value="${Math.round(s.amount)}">
+        <button type="button" class="btn ghost sm" onclick="this.parentElement.parentElement.remove()">✕</button>
+      </div>
+      ${isChurnHtml}
+    </div>`;
+  }).join('');
   openModal({
     title: 'Проверь распознанное',
     submitText: 'Применить',
@@ -1794,11 +1817,28 @@ function openOcrConfirmModal(meta){
         }
       });
 
-      p.spends.forEach((_,i)=>{
+            p.spends.forEach((s,i)=>{
         const m = data[`spMerchant_${i}`];
         const c = data[`spCat_${i}`];
         const a = Number(data[`spAmt_${i}`]);
-        if(a){
+        const isChurn = data[`isChurn_${i}`] === 'on';
+
+        if(isChurn){
+          const debtId = data[`churnDebt_${i}`];
+          const d = state.debts.find(x => x.id === debtId);
+          if(d && d.churn){
+            const amt = Math.abs(a);
+            d.churn.rounds.push({
+              id: 'c_ocr_'+Date.now()+'_'+i,
+              date: new Date().toISOString(),
+              amount: amt,
+              tool: s.churnTool || 'ozon',
+              note: 'Из OCR'
+            });
+            d.churn.coveredAmount = (d.churn.coveredAmount || 0) + amt;
+            applied++;
+          }
+        } else if(a){
           state.spends.push({
             id: 'sp_'+Date.now()+'_'+i,
             date: new Date().toISOString(),
