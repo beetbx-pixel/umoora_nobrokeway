@@ -725,7 +725,10 @@ function upcomingEvents(days = 90){
     if(d.current <= 0) return;
     
     // Проверка: если грейс закрыт кругами, не показываем напоминание
-    if(d.churn && d.churn.coveredAmount >= d.current) return;
+    if(d.churn){
+  const info = churnInfo(d);
+  if(info && info.remaining <= 0) return;
+}
 
     const paidCycles = d.paidCycles || [];
     if(d.dueDay){
