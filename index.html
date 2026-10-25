@@ -759,7 +759,7 @@ function upcomingEvents(days = 90){
         st = new Date(st); st.setMonth(st.getMonth()+1);
       }
     }
-  });
+  };
   return events.sort((a,b)=>a.date-b.date);
 }
 
