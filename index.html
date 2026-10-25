@@ -881,6 +881,7 @@ function addReserveTransfer(){
       });
 
       saveState(); renderAll();
+      sendToSheets('Из резерва', d.name, amt, data.note || '');
       toast(`Переведено ${fmt(amt)} → «${d.name}»`);
     }
   });
@@ -967,6 +968,7 @@ function addChurnRound(debtId){
       saveState(); renderAll();
       const ni = churnInfo(d);
       const toolLabel = data.tool === 'wb' ? 'WB' : 'Ozon';
+      sendToSheets(`Круг ${toolLabel}`, d.name, amt, data.note || '');
       toast(`${toolLabel}-круг ${fmtN(amt)} ₽ · осталось ${fmtN(ni.remaining)} ₽`);
     }
   });
@@ -1002,6 +1004,7 @@ function completeAllChurnRounds(debtId){
   d.churn.coveredAmount = (d.churn.coveredAmount || 0) + info.remaining;
   if(!d.churn.cycleStart) d.churn.cycleStart = new Date().toISOString();
   saveState(); renderAll();
+  sendToSheets('Все круги', d.name, info.remaining, 'Автозаполнение');
   toast('Все круги отмечены ✅');
 }
 function resetChurnCycle(debtId){
@@ -1838,7 +1841,7 @@ function openOcrConfirmModal(meta){
         }
       });
 
-      p.spends.forEach((s,i)=>{
+            p.spends.forEach((s,i)=>{
         const m = data[`spMerchant_${i}`];
         const c = data[`spCat_${i}`];
         const a = Number(data[`spAmt_${i}`]);
@@ -1849,7 +1852,6 @@ function openOcrConfirmModal(meta){
           const d = state.debts.find(x => x.id === debtId);
           if(d && d.churn){
             const amt = Math.abs(a);
-            if(!d.churn.rounds) d.churn.rounds = [];
             d.churn.rounds.push({
               id: 'c_ocr_'+Date.now()+'_'+i,
               date: new Date().toISOString(),
@@ -1858,7 +1860,7 @@ function openOcrConfirmModal(meta){
               note: 'Из OCR'
             });
             d.churn.coveredAmount = (d.churn.coveredAmount || 0) + amt;
-            if(!d.churn.cycleStart) d.churn.cycleStart = new Date().toISOString();
+            sendToSheets(`Круг (OCR ${(s.churnTool || 'ozon').toUpperCase()})`, d.name, amt, 'Из скрина');
             applied++;
           }
         } else if(a){
@@ -1870,10 +1872,11 @@ function openOcrConfirmModal(meta){
             category: c || 'other',
             screenId: meta.id
           });
+          sendToSheets('Трата (OCR)', m || '—', Math.abs(a), c || '');
           applied++;
         }
       });
-
+            
       saveState(); renderAll();
       toast(`Применено записей: ${applied}`);
     }
@@ -1931,6 +1934,7 @@ function openAddSpendModal(){
         category: data.category||'other'
       });
       saveState(); renderAll();
+      sendToSheets('Трата', data.merchant || '—', Math.abs(a), data.category || '');
       toast('Трата записана');
     }
   });
@@ -2043,6 +2047,7 @@ function openPayModal(debtId){
         paidCycle: markedCycle
       });
       saveState(); renderAll();
+      sendToSheets('Платёж', d.name, amt, data.note || '');
       toast(`Платёж ${fmt(amt)} по «${d.name}»`);
     }
   });
