@@ -1,3 +1,21 @@
+const CACHE_NAME = 'umoora-tracker-v1';
+const ASSETS = [
+  '/umoora_nobrokeway/',
+  '/umoora_nobrokeway/index.html',
+  '/umoora_nobrokeway/manifest.json'
+];
+
+self.addEventListener('install', (e) => {
+  e.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+  );
+});
+
+self.addEventListener('fetch', (e) => {
+  e.respondWith(
+    caches.match(e.request).then((res) => res || fetch(e.request))
+  );
+});
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
