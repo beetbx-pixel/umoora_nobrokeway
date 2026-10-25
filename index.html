@@ -1122,12 +1122,12 @@ function renderOverview(){
       <div class="stat"><div class="stat-num" style="color:${overLimit?'var(--p3)':'var(--p4)'}">${fmtN(todayTotal)} ₽</div><div class="stat-lbl">Потрачено сегодня</div></div>
       <div class="stat"><div class="stat-num" style="color:var(--p4)">${fmtN(avail)} ₽</div><div class="stat-lbl">На долги/мес</div></div>
     </div>
+        ${('Notification' in window && firebase.messaging.isSupported()) ? `
     <div class="card">
       <h3>🔔 Уведомления</h3>
       <div class="muted small" style="margin-bottom:.5rem">Включи, чтобы получать напоминания о платежах за 3-5 дней.</div>
       <button class="btn primary" style="width:100%" onclick="requestNotifications()">Включить пуши</button>
-    </div>
-    ${churnBanner()}
+    </div>` : ''}
 
     ${next ? (() => {
       const dd = daysUntil(next.date);
