@@ -1,0 +1,25 @@
+importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
+
+firebase.initializeApp({
+  apiKey: "AIzaSyCO-m8tat9RHhKa5-dlWpanveElBtpfxco",
+  authDomain: "nobrokeway.firebaseapp.com",
+  projectId: "nobrokeway",
+  storageBucket: "nobrokeway.firebasestorage.app",
+  messagingSenderId: "577683713672",
+  appId: "1:577683713672:web:ca7e94188780db93b2393d"
+});
+
+const messaging = firebase.messaging();
+
+// Этот код сработает, когда придет пуш, а приложение закрыто
+messaging.onBackgroundMessage((payload) => {
+  console.log('[sw.js] Получено фоновое сообщение:', payload);
+  const notificationTitle = payload.notification.title;
+  const notificationOptions = {
+    body: payload.notification.body,
+    icon: '/umoora_nobrokeway/icon.png' // Позже добавим иконку
+  };
+
+  self.registration.showNotification(notificationTitle, notificationOptions);
+});
