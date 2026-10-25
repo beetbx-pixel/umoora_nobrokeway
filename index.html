@@ -163,7 +163,6 @@
   <div class="actions">
     <button class="icon-btn" id="themeBtn" title="Тема">☀️</button>
     <button class="icon-btn" id="exportBtn" title="Экспорт JSON">⬇️</button>
-    <button class="icon-btn" onclick="alert('fb: ' + typeof firebase + ' | ready: ' + (typeof fbReady!=='undefined'?fbReady:'no') + ' | user: ' + (typeof fbUser!=='undefined'&&fbUser?fbUser.uid:'no'))" title="Debug">🐞</button>
     <button class="icon-btn" id="csvBtn" title="Экспорт CSV">📊</button>
     <button class="icon-btn" id="importBtn" title="Импорт">⬆️</button>
     <button class="icon-btn" id="logoutBtn" title="Выйти" style="display:none">🚪</button>
@@ -213,87 +212,11 @@
 /* ============================================================
    STATE
 ============================================================ */
-/* ============================================================
-   FIREBASE
-============================================================ */
-const firebaseConfig = {
-  apiKey: "AIzaSyCO-m8tat9RHhKa5-dlWpanveElBtpfxco",
-  authDomain: "nobrokeway.firebaseapp.com",
-  projectId: "nobrokeway",
-  storageBucket: "nobrokeway.firebasestorage.app",
-  messagingSenderId: "577683713672",
-  appId: "1:577683713672:web:ca7e94188780db93b2393d"
-};
+const LS_KEY = 'debt_standup_tracker_v5';
 
-let fbAuth = null;
-let fbDb = null;
-let fbUser = null;
-let fbReady = false;
-let fbUnsubscribe = null;
-let fbInitialLoaded = false;
-
-try{
-  firebase.initializeApp(firebaseConfig);
-  fbAuth = firebase.auth();
-  fbDb = firebase.firestore();
-  fbAuth.onAuthStateChanged(async (user) => {
-    if(user && user.isAnonymous){
-      try{ await fbAuth.signOut(); }catch(e){}
-      return;
-    }
-    if(!user){
-      showLoginOverlay();
-      return;
-    }
-    fbUser = user;
-    fbReady = true;
-    console.log('🔥 Firebase user:', user.uid, '| name:', user.displayName || '(нет)');
-    hideLoginOverlay();
-
-    fbUnsubscribe = fbDb.collection('users').doc(user.uid).onSnapshot(
-      (doc) => {
-        if(doc.exists){
-          const cloud = doc.data();
-          if(cloud && cloud.data){
-            const cloudUpdated = cloud.updatedAt ? cloud.updatedAt.toMillis() : 0;
-            // ПЕРВЫЙ раз — всегда берём облако, что бы ни было локально
-            if(!fbInitialLoaded){
-              fbInitialLoaded = true;
-              state = migrate(cloud.data);
-              state._lastUpdated = cloudUpdated || Date.now();
-              localStorage.setItem(LS_KEY, JSON.stringify(state));
-              renderAll();
-              console.log('☁️ Загружено из облака (первый раз)');
-              return;
-            }
-            // Дальше — только если облако свежее
-            const localUpdated = state._lastUpdated || 0;
-            if(cloudUpdated >= localUpdated){
-              state = migrate(cloud.data);
-              state._lastUpdated = cloudUpdated;
-              localStorage.setItem(LS_KEY, JSON.stringify(state));
-              renderAll();
-              console.log('☁️ Обновление из облака');
-            }
-          }
-        } else {
-          // Облако пустое — разрешаем запись
-          fbInitialLoaded = true;
-          console.log('☁️ Облако пустое — пишу локальные');
-          saveState();
-        }
-      },
-      (err) => console.warn('Firestore listen error:', err)
-    );
-    });
-}catch(e){
-  console.warn(' init failed', e);
-}
-
-  const LS_KEY = 'debt_standup_tracker_v5';
 const DEFAULT_STATE = {
   version: 6,
-    debts: [
+  debts: [
     { id:'lawyers', name:'Юристы (через друга)', initial:47000, current:47000, rate:0, minPayment:0, dueDay:null, statementDay:null, priority:1, color:'#dc2626', note:'Не затягивать — отношения' },
     { id:'loan',    name:'Кредит 40% (Моор)', initial:50124, current:50124, rate:40, minPayment:2010, dueDay:16, statementDay:null, priority:2, color:'#b91c1c', note:'Дог. 0108915634 · 60 мес · платёж 16-го · переплата ~68к' },
     { id:'cc400',   name:'Кредитка 400к (Харина)', initial:415849, current:415865, rate:0.72, minPayment:23089, dueDay:26, statementDay:2, priority:3, color:'#2563eb', note:'Грейс сорван · 8,22 ₽/день · остановить = 415 848,58 ₽',
@@ -303,6 +226,10 @@ const DEFAULT_STATE = {
       churn:{ enabled:true, coveredAmount:0, rounds:[], cycleStart:null, avgRound:50000 } },
     { id:'father',  name:'Отец', initial:50000, current:50000, rate:0, minPayment:0, dueDay:null, statementDay:null, priority:5, color:'#6366f1', note:'Как получится' },
     { id:'alfa',    name:'Альфа 20к (Моор)', initial:19480, current:19480, rate:58.99, minPayment:600, dueDay:13, statementDay:null, priority:6, color:'#ef4444', note:'58,99% · грейс до 03.12.2026 · страховка отключена' }
+  ],
+  oneTime: [
+    { id:'deposit',  name:'Залог за квартиру (1/2)', amount:35000 },
+    { id:'deposit2', name:'Залог за квартиру (2/2)', amount:35000 }
   ],
   payments: [],
   reserve: { balance: 0, log: [] },
@@ -339,30 +266,81 @@ let notesQuery = '';
 let notesTag = '';
 
 /* ============================================================
-   STORAGE + SYNC
+   FIREBASE
 ============================================================ */
-function loadState(){
-  try{
-    const raw = localStorage.getItem(LS_KEY);
-    if(raw) return migrate(JSON.parse(raw));
-  }catch(e){ console.warn(e); }
-  return structuredClone(DEFAULT_STATE);
-}
-function saveState(){
-  try{
-    state._lastUpdated = Date.now();   // ← ЭТУ СТРОКУ ДОБАВИТЬ
-    localStorage.setItem(LS_KEY, JSON.stringify(state));
-    if(syncChannel) syncChannel.postMessage({ type:'update', payload: state });
-    // → Firebase: пишем в облако
-    if(fbReady && fbUser && fbDb && fbInitialLoaded){
-      fbDb.collection('users').doc(fbUser.uid).set({
-        data: state,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      }).catch(e => console.warn('Firebase save error:', e));
+const firebaseConfig = {
+  apiKey: "AIzaSyCO-m8tat9RHhKa5-dlWpanveElBtpfxco",
+  authDomain: "nobrokeway.firebaseapp.com",
+  projectId: "nobrokeway",
+  storageBucket: "nobrokeway.firebasestorage.app",
+  messagingSenderId: "577683713672",
+  appId: "1:577683713672:web:ca7e94188780db93b2393d"
+};
+
+let fbAuth = null;
+let fbDb = null;
+let fbUser = null;
+let fbReady = false;
+let fbUnsubscribe = null;
+let fbInitialLoaded = false;
+
+try{
+  firebase.initializeApp(firebaseConfig);
+  fbAuth = firebase.auth();
+  fbDb = firebase.firestore();
+
+  fbAuth.onAuthStateChanged(async (user) => {
+    if(user && user.isAnonymous){
+      try{ await fbAuth.signOut(); }catch(e){}
+      return;
     }
-  }catch(e){ console.warn(e); }
+    if(!user){
+      showLoginOverlay();
+      return;
+    }
+    fbUser = user;
+    fbReady = true;
+    console.log('🔥 Firebase user:', user.uid, '| name:', user.displayName || '(нет)');
+    hideLoginOverlay();
+
+    if(fbUnsubscribe) fbUnsubscribe();
+    fbUnsubscribe = fbDb.collection('users').doc(user.uid).onSnapshot(
+      (doc) => {
+        if(doc.exists){
+          const cloud = doc.data();
+          if(cloud && cloud.data){
+            const cloudUpdated = cloud.updatedAt ? cloud.updatedAt.toMillis() : 0;
+            if(!fbInitialLoaded){
+              fbInitialLoaded = true;
+              state = migrate(cloud.data);
+              state._lastUpdated = cloudUpdated || Date.now();
+              localStorage.setItem(LS_KEY, JSON.stringify(state));
+              renderAll();
+              console.log('☁️ Загружено из облака (первый раз)');
+              return;
+            }
+            const localUpdated = state._lastUpdated || 0;
+            if(cloudUpdated >= localUpdated){
+              state = migrate(cloud.data);
+              state._lastUpdated = cloudUpdated;
+              localStorage.setItem(LS_KEY, JSON.stringify(state));
+              renderAll();
+              console.log('☁️ Обновление из облака');
+            }
+          }
+        } else {
+          fbInitialLoaded = true;
+          console.log('☁️ Облако пустое — пишу локальные');
+          saveState();
+        }
+      },
+      (err) => console.warn('Firestore listen error:', err)
+    );
+  });
+}catch(e){
+  console.warn('Firebase init failed', e);
 }
-  
+
 /* ============================================================
    LOGIN OVERLAY (Google Sign-In)
 ============================================================ */
@@ -370,21 +348,13 @@ function showLoginOverlay(){
   if(document.getElementById('loginOverlay')) return;
   const overlay = document.createElement('div');
   overlay.id = 'loginOverlay';
-  overlay.style.cssText = `
-    position:fixed;inset:0;background:rgba(11,18,32,.95);z-index:9999;
-    display:flex;align-items:center;justify-content:center;padding:1rem;
-  `;
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(11,18,32,.95);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
   overlay.innerHTML = `
     <div style="background:var(--card);border-radius:16px;padding:2rem 1.5rem;max-width:400px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5)">
       <div style="font-size:3rem;margin-bottom:.5rem">💰</div>
       <h2 style="margin:0 0 .3rem;font-size:1.3rem">Трекер долгов</h2>
       <p class="muted small" style="margin:0 0 1.5rem">Войди, чтобы синхронизировать данные между устройствами</p>
-      <button id="googleSignInBtn" style="
-        display:flex;align-items:center;justify-content:center;gap:.6rem;
-        width:100%;padding:.8rem 1rem;border:1px solid var(--border);
-        border-radius:10px;background:#fff;color:#1f1f1f;font-weight:600;
-        font-size:1rem;cursor:pointer;font-family:inherit;
-      ">
+      <button id="googleSignInBtn" style="display:flex;align-items:center;justify-content:center;gap:.6rem;width:100%;padding:.8rem 1rem;border:1px solid var(--border);border-radius:10px;background:#fff;color:#1f1f1f;font-weight:600;font-size:1rem;cursor:pointer;font-family:inherit;">
         <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.5 0 10.5-2.1 14.3-5.5l-6.6-5.4C29.7 34.9 27 36 24 36c-5.2 0-9.7-3.3-11.3-8l-6.5 5C9.6 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.3 5.6l6.6 5.4C42 35.5 44 30.2 44 24c0-1.3-.1-2.3-.4-3.5z"/></svg>
         Войти через Google
       </button>
@@ -403,9 +373,7 @@ function showLoginOverlay(){
       if(e.code === 'auth/popup-blocked' || e.code === 'auth/popup-closed-by-user'){
         try{
           await fbAuth.signInWithRedirect(provider);
-        }catch(e2){
-          alert('Не удалось войти: ' + e2.message);
-        }
+        }catch(e2){ alert('Не удалось войти: ' + e2.message); }
       } else {
         alert('Ошибка входа: ' + e.message);
       }
@@ -419,6 +387,32 @@ function hideLoginOverlay(){
   const lb = document.getElementById('logoutBtn');
   if(lb) lb.style.display = '';
 }
+
+/* ============================================================
+   STORAGE + SYNC
+============================================================ */
+function loadState(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(raw) return migrate(JSON.parse(raw));
+  }catch(e){ console.warn(e); }
+  return structuredClone(DEFAULT_STATE);
+}
+
+function saveState(){
+  try{
+    state._lastUpdated = Date.now();
+    localStorage.setItem(LS_KEY, JSON.stringify(state));
+    if(syncChannel) syncChannel.postMessage({ type:'update', payload: state });
+    if(fbReady && fbUser && fbDb && fbInitialLoaded){
+      fbDb.collection('users').doc(fbUser.uid).set({
+        data: state,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }).catch(e => console.warn('Firebase save error:', e));
+    }
+  }catch(e){ console.warn(e); }
+}
+
 function migrate(s){
   const d = structuredClone(DEFAULT_STATE);
   const out = { ...d, ...s };
@@ -429,6 +423,7 @@ function migrate(s){
   if(typeof out.balances !== 'object' || !out.balances) out.balances = {};
   if(!out.reserve || typeof out.reserve !== 'object') out.reserve = { balance: 0, log: [] };
   if(!Array.isArray(out.reserve.log)) out.reserve.log = [];
+
   const sv = Number(s.version || 0);
   if(sv < 6){
     out.debts = structuredClone(d.debts);
@@ -509,7 +504,8 @@ function parseOCRText(text){
   if(!text) return result;
   const lines = text.split(/\n+/).map(l=>l.trim()).filter(Boolean);
 
-  const balanceRx = /(?:доступно|баланс|остаток|итого|к оплате)[^\d]{0,20}([\d\s]{3,15}[.,]?\d{0,2})\s*(?:₽|руб|р\.)/i;
+  const balanceRx = /(?:доступно|баланс|остаток|итого|к оплате|платинум)[^\d]{0,20}([\d\s]{3,15}[.,]?\d{0,2})\s*(?:₽|руб|р\.?|Р)/i;
+  const rawAmountRx = /^([\d\s]{3,15}[.,]\d{2})\s*(?:₽|руб|р\.?|Р)$/i;
   const spendRx   = /[-−]\s*([\d\s]{2,12}[.,]?\d{0,2})\s*(?:₽|руб|р\.)/;
   const incomeRx  = /[+]\s*([\d\s]{2,12}[.,]?\d{0,2})\s*(?:₽|руб|р\.)/;
 
@@ -522,7 +518,11 @@ function parseOCRText(text){
   ];
 
   for(const line of lines){
-    const bm = line.match(balanceRx);
+    let bm = line.match(balanceRx);
+    if(!bm && line.length < 20){
+      const rm = line.match(rawAmountRx);
+      if(rm) bm = rm;
+    }
     if(bm){
       const amount = parseFloat(bm[1].replace(/\s/g,'').replace(',','.'));
       if(!isNaN(amount) && amount > 100){
@@ -619,18 +619,19 @@ function toast(msg, type='ok'){
 /* ============================================================
    CALCULATIONS
 ============================================================ */
+function dynCurrent(d){
+  if(!d || !d.dailyRate || !d.baseDate || !d.baseAmount) return d ? d.current : 0;
+  const base = new Date(d.baseDate); base.setHours(0,0,0,0);
+  const days = Math.max(0, Math.floor((today() - base) / 86400000));
+  return d.baseAmount * (1 + days * d.dailyRate);
+}
+
 const totalCurrent = () => state.debts.reduce((s,d)=>s+dynCurrent(d),0);
 const totalInitial = () => state.debts.reduce((s,d)=>s+d.initial,0);
 const totalPaid    = () => Math.max(0, totalInitial() - totalCurrent());
 const monthlyExpenses = () => state.budget.expenses.reduce((s,e)=>s+Number(e.amount||0),0);
 const monthlyAvailable = () => Math.max(0, state.budget.monthlyIncome - monthlyExpenses());
 const dailyLimit = () => (state.settings.maxLifeBudget || 0) / 30;
-  function dynCurrent(d){
-  if(!d || !d.dailyRate || !d.baseDate || !d.baseAmount) return d ? d.current : 0;
-  const base = new Date(d.baseDate); base.setHours(0,0,0,0);
-  const days = Math.max(0, Math.floor((today() - base) / 86400000));
-  return d.baseAmount * (1 + days * d.dailyRate);
-}
 
 function projectSeries(monthlyPayment){
   let list = state.debts.filter(d=>d.current>0).map(d=>({...d}));
@@ -669,7 +670,7 @@ function upcomingEvents(days = 90){
   const end = new Date(start); end.setDate(end.getDate()+days);
   const lead = state.settings.reminderLeadDays || 5;
 
-    state.debts.forEach(d=>{
+  state.debts.forEach(d=>{
     if(d.current <= 0) return;
     const paidCycles = d.paidCycles || [];
     if(d.dueDay){
@@ -707,181 +708,6 @@ function upcomingEvents(days = 90){
   return events.sort((a,b)=>a.date-b.date);
 }
 
-/* ============================================================
-   CHURN (прокрутка кредиток)
-============================================================ */
-function daysUntilThisMonth(day){
-  const now = today();
-  let d = new Date(now.getFullYear(), now.getMonth(), day);
-  if(d < now) d.setMonth(d.getMonth() + 1);
-  return Math.round((d - now) / 86400000);
-}
-
-function churnInfo(debt){
-  if(!debt.churn || !debt.churn.enabled) return null;
-  const goal = debt.current;
-  const covered = debt.churn.coveredAmount || 0;
-  const remaining = Math.max(0, goal - covered);
-  const rounds = debt.churn.rounds || [];
-  const avgRound = rounds.length
-    ? rounds.reduce((s,r)=>s+r.amount,0)/rounds.length
-    : (debt.churn.avgRound || 50000);
-  const byOzon = rounds.filter(r => (r.tool || 'ozon') === 'ozon').reduce((s,r)=>s+r.amount,0);
-  const byWb   = rounds.filter(r => r.tool === 'wb').reduce((s,r)=>s+r.amount,0);
-  const daysLeft = debt.dueDay ? daysUntilThisMonth(debt.dueDay) : null;
-  const safeDays = daysLeft != null ? Math.max(1, daysLeft - 3) : null;
-  const roundsRemaining = Math.ceil(remaining / Math.max(avgRound,1));
-  const perDayNeeded = safeDays ? roundsRemaining / safeDays : null;
-  const progress = goal ? Math.min(100, covered/goal*100) : 0;
-  return {
-    goal, covered, remaining, rounds, avgRound,
-    daysLeft, safeDays, roundsRemaining, perDayNeeded,
-    progress, byOzon, byWb,
-    cycleStart: debt.churn.cycleStart
-  };
-}
-
-function addChurnRound(debtId){
-  const d = state.debts.find(x=>x.id===debtId);
-  if(!d || !d.churn) return;
-  const info = churnInfo(d);
-    openModal({
-    title: 'Новый круг: ' + d.name,
-    body: `
-      <div class="muted small">Отметь после того, как деньги вернулись (Ozon) или ушли в WB-кошелёк.</div>
-      <label>Инструмент</label>
-      <div class="row" style="margin-bottom:.3rem">
-        <label class="check" style="flex:1;padding:.4rem;border:1px solid var(--border);border-radius:10px">
-          <input type="radio" name="tool" value="ozon" checked onchange="document.getElementById('roundHint').textContent='Ozon: деньги вернутся на карту, лимит восстановится'">
-          Ozon
-        </label>
-        <label class="check" style="flex:1;padding:.4rem;border:1px solid var(--border);border-radius:10px">
-          <input type="radio" name="tool" value="wb" onchange="document.getElementById('roundHint').textContent='WB: деньги уйдут в WB-кошелёк, надо выводить'">
-          WB
-        </label>
-      </div>
-      <div id="roundHint" class="muted small" style="margin-bottom:.4rem">Ozon: деньги вернутся на карту, лимит восстановится</div>
-      <label>Сумма круга, ₽</label>
-      <input type="number" name="amount" value="${Math.round(info?.avgRound || 50000)}" min="1" required autofocus>
-      <div class="row" style="margin-top:.6rem">
-        <button type="button" class="btn ghost sm" onclick="this.form.amount.value=30000">30к</button>
-        <button type="button" class="btn ghost sm" onclick="this.form.amount.value=50000">50к</button>
-        <button type="button" class="btn ghost sm" onclick="this.form.amount.value=70000">70к</button>
-      </div>
-      <label>Заметка</label>
-      <input name="note" placeholder="Корзина №...">
-    `,
-    submitText: 'Записать круг',
-        onSubmit: data => {
-      const amt = Number(data.amount);
-      if(!amt || amt <= 0) return false;
-      if(!d.churn.rounds) d.churn.rounds = [];
-      d.churn.rounds.push({
-        id: 'c_'+Date.now(),
-        date: new Date().toISOString(),
-        amount: amt,
-        tool: data.tool || 'ozon',
-        note: data.note || ''
-      });
-      d.churn.coveredAmount = (d.churn.coveredAmount || 0) + amt;
-      if(!d.churn.cycleStart) d.churn.cycleStart = new Date().toISOString();
-      saveState(); renderAll();
-      const ni = churnInfo(d);
-      const toolLabel = data.tool === 'wb' ? 'WB' : 'Ozon';
-      toast(`${toolLabel}-круг ${fmtN(amt)} ₽ · осталось ${fmtN(ni.remaining)} ₽`);
-    }
-  });
-}
-
-function removeChurnRound(debtId, roundId){
-  const d = state.debts.find(x=>x.id===debtId);
-  if(!d || !d.churn) return;
-  const r = (d.churn.rounds||[]).find(x=>x.id===roundId);
-  if(!r) return;
-  if(!confirm(`Удалить круг на ${fmt(r.amount)}?`)) return;
-  d.churn.rounds = d.churn.rounds.filter(x=>x.id!==roundId);
-  d.churn.coveredAmount = Math.max(0, (d.churn.coveredAmount||0) - r.amount);
-  saveState(); renderAll();
-  toast('Круг удалён', 'err');
-}
-
-function resetChurnCycle(debtId){
-  const d = state.debts.find(x=>x.id===debtId);
-  if(!d || !d.churn) return;
-  if(!confirm('Начать новый цикл? Все отметки кругов сбросятся.')) return;
-  d.churn.coveredAmount = 0;
-  d.churn.rounds = [];
-  d.churn.cycleStart = new Date().toISOString();
-  saveState(); renderAll();
-  toast('Цикл обнулён');
-}
-
-function churnSchedule(debt, days = 14){
-  const info = churnInfo(debt);
-  if(!info || !info.safeDays || info.remaining <= 0) return [];
-  const perDay = info.remaining / info.safeDays;
-  const out = [];
-  let acc = 0;
-  for(let i = 0; i < Math.min(info.safeDays, days); i++){
-    const target = Math.round((i+1) * perDay);
-    const amt = target - acc;
-    if(amt > 0){
-      const date = new Date(today()); date.setDate(date.getDate() + i);
-      out.push({ date, amount: amt });
-      acc = target;
-    }
-  }
-  return out;
-}
-
-function renderChurnBlock(d){
-  const i = churnInfo(d);
-  if(!i) return '';
-  const closed = i.remaining <= 0;
-    const roundsList = (i.rounds || []).slice().reverse().slice(0, 6).map(r => {
-    const tool = r.tool === 'wb' ? '🟣 WB' : '🔵 Ozon';
-    return `
-    <div class="row" style="justify-content:space-between;padding:.3rem 0;border-bottom:1px solid var(--border)">
-      <span class="muted small">${new Date(r.date).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})} · ${tool}${r.note?' · '+esc(r.note):''}</span>
-      <span><b>${fmtN(r.amount)} ₽</b> <button class="btn ghost sm" onclick="removeChurnRound('${d.id}','${r.id}')">✕</button></span>
-    </div>`;
-  }).join('');
-
-  return `
-    <div class="churn-box">
-      <div class="row" style="justify-content:space-between">
-        <b>🌀 Прокрутка</b>
-        <span class="muted small">${fmtN(i.covered)} / ${fmtN(i.goal)} ₽</span>
-      </div>
-      <div class="progress" style="margin:.4rem 0">
-        <div class="progress-fill" style="width:${i.progress}%;background:var(--p5)"></div>
-      </div>
-      ${closed ? `
-        <div class="muted small" style="color:var(--p2)">✅ Закрыто — грейс обнулён. Отдых до следующей выписки.</div>
-      ` : `
-        <div class="muted small">
-          Осталось: <b>${fmtN(i.remaining)} ₽</b>
-          ${i.avgRound ? ` (~${i.roundsRemaining} ${plural(i.roundsRemaining,'круг','круга','кругов')} по ${fmtN(i.avgRound)} ₽)` : ''}
-        </div>
-                ${(i.byOzon || i.byWb) ? `
-          <div class="muted small" style="margin-top:.2rem">
-            ${i.byOzon ? `🔵 Ozon: <b>${fmtN(i.byOzon)} ₽</b>` : ''}
-            ${i.byOzon && i.byWb ? ' · ' : ''}
-            ${i.byWb ? `🟣 WB: <b>${fmtN(i.byWb)} ₽</b> <span style="color:var(--p3)">(в кошельке)</span>` : ''}
-          </div>` : ''}
-        ${i.daysLeft != null ? `
-          <div class="muted small" style="margin-top:.2rem">
-            До дедлайна: <b>${i.daysLeft} ${plural(i.daysLeft,'день','дня','дней')}</b>
-            ${i.perDayNeeded ? ` · ориентир <b style="color:var(--p5)">${i.perDayNeeded.toFixed(1)} кр./день</b>` : ''}
-          </div>` : ''}
-        ${roundsList ? `<div style="margin-top:.5rem">${roundsList}</div>` : ''}
-        <div class="row" style="margin-top:.6rem">
-          <button class="btn primary sm" onclick="addChurnRound('${d.id}')">+ Записать круг</button>
-          <button class="btn ghost sm" onclick="resetChurnCycle('${d.id}')">Новый цикл</button>
-        </div>
-      `}
-    </div>`;
-}
 /* ============================================================
    RESERVE (резерв для стяга)
 ============================================================ */
@@ -1013,6 +839,183 @@ function addReserveTransfer(){
     }
   });
 }
+
+/* ============================================================
+   CHURN (прокрутка кредиток)
+============================================================ */
+function daysUntilThisMonth(day){
+  const now = today();
+  let d = new Date(now.getFullYear(), now.getMonth(), day);
+  if(d < now) d.setMonth(d.getMonth() + 1);
+  return Math.round((d - now) / 86400000);
+}
+
+function churnInfo(debt){
+  if(!debt.churn || !debt.churn.enabled) return null;
+  const goal = debt.current;
+  const covered = debt.churn.coveredAmount || 0;
+  const remaining = Math.max(0, goal - covered);
+  const rounds = debt.churn.rounds || [];
+  const avgRound = rounds.length
+    ? rounds.reduce((s,r)=>s+r.amount,0)/rounds.length
+    : (debt.churn.avgRound || 50000);
+  const byOzon = rounds.filter(r => (r.tool || 'ozon') === 'ozon').reduce((s,r)=>s+r.amount,0);
+  const byWb   = rounds.filter(r => r.tool === 'wb').reduce((s,r)=>s+r.amount,0);
+  const daysLeft = debt.dueDay ? daysUntilThisMonth(debt.dueDay) : null;
+  const safeDays = daysLeft != null ? Math.max(1, daysLeft - 3) : null;
+  const roundsRemaining = Math.ceil(remaining / Math.max(avgRound,1));
+  const perDayNeeded = safeDays ? roundsRemaining / safeDays : null;
+  const progress = goal ? Math.min(100, covered/goal*100) : 0;
+  return {
+    goal, covered, remaining, rounds, avgRound,
+    daysLeft, safeDays, roundsRemaining, perDayNeeded,
+    progress, byOzon, byWb,
+    cycleStart: debt.churn.cycleStart
+  };
+}
+
+function addChurnRound(debtId){
+  const d = state.debts.find(x=>x.id===debtId);
+  if(!d || !d.churn) return;
+  const info = churnInfo(d);
+  openModal({
+    title: 'Новый круг: ' + d.name,
+    body: `
+      <div class="muted small">Отметь после того, как деньги вернулись (Ozon) или ушли в WB-кошелёк.</div>
+      <label>Инструмент</label>
+      <div class="row" style="margin-bottom:.3rem">
+        <label class="check" style="flex:1;padding:.4rem;border:1px solid var(--border);border-radius:10px">
+          <input type="radio" name="tool" value="ozon" checked onchange="document.getElementById('roundHint').textContent='Ozon: деньги вернутся на карту, лимит восстановится'">
+          Ozon
+        </label>
+        <label class="check" style="flex:1;padding:.4rem;border:1px solid var(--border);border-radius:10px">
+          <input type="radio" name="tool" value="wb" onchange="document.getElementById('roundHint').textContent='WB: деньги уйдут в WB-кошелёк, надо выводить'">
+          WB
+        </label>
+      </div>
+      <div id="roundHint" class="muted small" style="margin-bottom:.4rem">Ozon: деньги вернутся на карту, лимит восстановится</div>
+      <label>Сумма круга, ₽</label>
+      <input type="number" name="amount" value="${Math.round(info?.avgRound || 50000)}" min="1" required autofocus>
+      <div class="row" style="margin-top:.6rem">
+        <button type="button" class="btn ghost sm" onclick="this.form.amount.value=30000">30к</button>
+        <button type="button" class="btn ghost sm" onclick="this.form.amount.value=50000">50к</button>
+        <button type="button" class="btn ghost sm" onclick="this.form.amount.value=70000">70к</button>
+      </div>
+      <label>Заметка</label>
+      <input name="note" placeholder="Корзина №...">
+    `,
+    submitText: 'Записать круг',
+    onSubmit: data => {
+      const amt = Number(data.amount);
+      if(!amt || amt <= 0) return false;
+      if(!d.churn.rounds) d.churn.rounds = [];
+      d.churn.rounds.push({
+        id: 'c_'+Date.now(),
+        date: new Date().toISOString(),
+        amount: amt,
+        tool: data.tool || 'ozon',
+        note: data.note || ''
+      });
+      d.churn.coveredAmount = (d.churn.coveredAmount || 0) + amt;
+      if(!d.churn.cycleStart) d.churn.cycleStart = new Date().toISOString();
+      saveState(); renderAll();
+      const ni = churnInfo(d);
+      const toolLabel = data.tool === 'wb' ? 'WB' : 'Ozon';
+      toast(`${toolLabel}-круг ${fmtN(amt)} ₽ · осталось ${fmtN(ni.remaining)} ₽`);
+    }
+  });
+}
+
+function removeChurnRound(debtId, roundId){
+  const d = state.debts.find(x=>x.id===debtId);
+  if(!d || !d.churn) return;
+  const r = (d.churn.rounds||[]).find(x=>x.id===roundId);
+  if(!r) return;
+  if(!confirm(`Удалить круг на ${fmt(r.amount)}?`)) return;
+  d.churn.rounds = d.churn.rounds.filter(x=>x.id!==roundId);
+  d.churn.coveredAmount = Math.max(0, (d.churn.coveredAmount||0) - r.amount);
+  saveState(); renderAll();
+  toast('Круг удалён', 'err');
+}
+
+function resetChurnCycle(debtId){
+  const d = state.debts.find(x=>x.id===debtId);
+  if(!d || !d.churn) return;
+  if(!confirm('Начать новый цикл? Все отметки кругов сбросятся.')) return;
+  d.churn.coveredAmount = 0;
+  d.churn.rounds = [];
+  d.churn.cycleStart = new Date().toISOString();
+  saveState(); renderAll();
+  toast('Цикл обнулён');
+}
+
+function churnSchedule(debt, days = 14){
+  const info = churnInfo(debt);
+  if(!info || !info.safeDays || info.remaining <= 0) return [];
+  const perDay = info.remaining / info.safeDays;
+  const out = [];
+  let acc = 0;
+  for(let i = 0; i < Math.min(info.safeDays, days); i++){
+    const target = Math.round((i+1) * perDay);
+    const amt = target - acc;
+    if(amt > 0){
+      const date = new Date(today()); date.setDate(date.getDate() + i);
+      out.push({ date, amount: amt });
+      acc = target;
+    }
+  }
+  return out;
+}
+
+function renderChurnBlock(d){
+  const i = churnInfo(d);
+  if(!i) return '';
+  const closed = i.remaining <= 0;
+  const roundsList = (i.rounds || []).slice().reverse().slice(0, 6).map(r => {
+    const tool = r.tool === 'wb' ? '🟣 WB' : '🔵 Ozon';
+    return `
+    <div class="row" style="justify-content:space-between;padding:.3rem 0;border-bottom:1px solid var(--border)">
+      <span class="muted small">${new Date(r.date).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})} · ${tool}${r.note?' · '+esc(r.note):''}</span>
+      <span><b>${fmtN(r.amount)} ₽</b> <button class="btn ghost sm" onclick="removeChurnRound('${d.id}','${r.id}')">✕</button></span>
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="churn-box">
+      <div class="row" style="justify-content:space-between">
+        <b>🌀 Прокрутка</b>
+        <span class="muted small">${fmtN(i.covered)} / ${fmtN(i.goal)} ₽</span>
+      </div>
+      <div class="progress" style="margin:.4rem 0">
+        <div class="progress-fill" style="width:${i.progress}%;background:var(--p5)"></div>
+      </div>
+      ${closed ? `
+        <div class="muted small" style="color:var(--p2)">✅ Закрыто — грейс обнулён. Отдых до следующей выписки.</div>
+      ` : `
+        <div class="muted small">
+          Осталось: <b>${fmtN(i.remaining)} ₽</b>
+          ${i.avgRound ? ` (~${i.roundsRemaining} ${plural(i.roundsRemaining,'круг','круга','кругов')} по ${fmtN(i.avgRound)} ₽)` : ''}
+        </div>
+        ${(i.byOzon || i.byWb) ? `
+          <div class="muted small" style="margin-top:.2rem">
+            ${i.byOzon ? `🔵 Ozon: <b>${fmtN(i.byOzon)} ₽</b>` : ''}
+            ${i.byOzon && i.byWb ? ' · ' : ''}
+            ${i.byWb ? `🟣 WB: <b>${fmtN(i.byWb)} ₽</b> <span style="color:var(--p3)">(в кошельке)</span>` : ''}
+          </div>` : ''}
+        ${i.daysLeft != null ? `
+          <div class="muted small" style="margin-top:.2rem">
+            До дедлайна: <b>${i.daysLeft} ${plural(i.daysLeft,'день','дня','дней')}</b>
+            ${i.perDayNeeded ? ` · ориентир <b style="color:var(--p5)">${i.perDayNeeded.toFixed(1)} кр./день</b>` : ''}
+          </div>` : ''}
+        ${roundsList ? `<div style="margin-top:.5rem">${roundsList}</div>` : ''}
+        <div class="row" style="margin-top:.6rem">
+          <button class="btn primary sm" onclick="addChurnRound('${d.id}')">+ Записать круг</button>
+          <button class="btn ghost sm" onclick="resetChurnCycle('${d.id}')">Новый цикл</button>
+        </div>
+      `}
+    </div>`;
+}
+
 function churnBanner(){
   const now = new Date();
   const banners = [];
@@ -1037,6 +1040,7 @@ function churnBanner(){
   }
   return banners.join('');
 }
+
 /* ============================================================
    RENDER — OVERVIEW
 ============================================================ */
@@ -1050,7 +1054,6 @@ function renderOverview(){
   const freeDate = months < 600 ? addMonths(new Date(), months) : null;
   const next = upcomingEvents(90)[0];
 
-  // Сегодняшние траты
   const todayStr = new Date().toDateString();
   const todaySpends = state.spends.filter(s => new Date(s.date).toDateString() === todayStr);
   const todayTotal = todaySpends.reduce((s,x)=>s+Math.abs(x.amount),0);
@@ -1063,9 +1066,9 @@ function renderOverview(){
       <div class="hero-sub">из ${fmt(initial)} · закрыто ${pct.toFixed(1)}%</div>
       <div class="progress"><div class="progress-fill" style="width:${Math.max(2,pct)}%"></div></div>
     </div>
-    
+
     ${renderReserve()}
-    
+
     <div class="stats-grid">
       <div class="stat"><div class="stat-num" style="color:var(--p2)">${fmt(paid)}</div><div class="stat-lbl">Выплачено</div></div>
       <div class="stat"><div class="stat-num" style="color:var(--p1)">${monthsToText(months)}</div><div class="stat-lbl">До нуля</div></div>
@@ -1075,7 +1078,7 @@ function renderOverview(){
 
     ${churnBanner()}
 
-        ${next ? (() => {
+    ${next ? (() => {
       const dd = daysUntil(next.date);
       const urgent = dd <= 3 && next.type === 'payment';
       const canPay = next.type === 'payment' && next.debtId;
@@ -1123,7 +1126,7 @@ function renderOverview(){
       <h3>Рекомендуемые даты платежей</h3>
       <div class="muted small">Под ЗП 10 и 20 числа:</div>
       <div class="cal-item"><div class="cal-date c-reminder"><div class="d">11</div><div class="m">число</div></div><div class="cal-body"><div class="cal-title">Кредитка 255к</div><div class="cal-sub">Мин. платёж — после ЗП 10-го</div></div></div>
-            <div class="cal-item"><div class="cal-date c-payment"><div class="d">16</div><div class="m">число</div></div><div class="cal-body"><div class="cal-title">Кредит 40%</div><div class="cal-sub">Мин. платёж 16-го · после ЗП 10-го</div></div></div>
+      <div class="cal-item"><div class="cal-date c-payment"><div class="d">16</div><div class="m">число</div></div><div class="cal-body"><div class="cal-title">Кредит 40%</div><div class="cal-sub">Мин. платёж 16-го · после ЗП 10-го</div></div></div>
       <div class="cal-item"><div class="cal-date c-risk"><div class="d">26</div><div class="m">число</div></div><div class="cal-body"><div class="cal-title">Кредитка 400к</div><div class="cal-sub">Закрытие грейса — есть 5 дней на добивку</div></div></div>
     </div>
   `;
@@ -1160,7 +1163,7 @@ function renderDebts(){
       <div class="debt ${closed?'closed':''}">
         <div class="debt-head">
           <div class="debt-name" style="color:${closed?'var(--muted)':d.color}">${closed?'✓ ':''}${esc(d.name)}</div>
-          <div class="debt-amt">${fmt(d.current)}</div>
+          <div class="debt-amt">${fmt(dynCurrent(d))}</div>
         </div>
         <div class="debt-meta">
           <span>из ${fmt(d.initial)}</span>
@@ -1234,9 +1237,9 @@ function renderCalendar(){
 
     <div class="card">
       <h3>Рекомендуемая схема</h3>
-      <div class="muted small">ЗП 10 и 20 → платим 11, 21, 26</div>
+      <div class="muted small">ЗП 10 и 20 → платим 11, 16, 26</div>
       <div class="cal-item"><div class="cal-date c-reminder"><div class="d">11</div><div class="m">число</div></div><div class="cal-body"><div class="cal-title">Кредитка 255к — мин. платёж</div><div class="cal-sub">Сразу после ЗП 10-го</div></div></div>
-      <div class="cal-item"><div class="cal-date c-payment"><div class="d">21</div><div class="m">число</div></div><div class="cal-body"><div class="cal-title">Кредит 40%</div><div class="cal-sub">После ЗП 20-го</div></div></div>
+      <div class="cal-item"><div class="cal-date c-payment"><div class="d">16</div><div class="m">число</div></div><div class="cal-body"><div class="cal-title">Кредит 40%</div><div class="cal-sub">После ЗП 10-го</div></div></div>
       <div class="cal-item"><div class="cal-date c-risk"><div class="d">26</div><div class="m">число</div></div><div class="cal-body"><div class="cal-title">Кредитка 400к — грейс</div><div class="cal-sub">Дедлайн закрытия грейса</div></div></div>
       <button class="btn ghost" style="margin-top:.7rem;width:100%" onclick="applyRecommendedDates()">Применить рекомендованные даты</button>
     </div>
@@ -1258,7 +1261,7 @@ function renderCalendar(){
             </div>
           </div>`;
       }).join('') || '<div class="muted small">Нет активных циклов</div>'}
-      <div class="muted small" style="margin-top:.5rem">🌀 Озон возвращает <b>на карту</b> → лимит восстанавливается сам. Крути в любом темпе, пока успеваешь до дедлайна.</div>
+      <div class="muted small" style="margin-top:.5rem">🌀 Озон возвращает <b>на карту</b> → лимит восстанавливается сам. WB — в кошелёк.</div>
     </div>
 
     <div class="card">
@@ -1269,13 +1272,13 @@ function renderCalendar(){
 }
 
 function applyRecommendedDates(){
-  const map = { cc255: 11, loan: 21, cc400: 26 };
+  const map = { cc255: 11, loan: 16, cc400: 26 };
   Object.entries(map).forEach(([id, day]) => {
     const d = state.debts.find(x=>x.id===id);
     if(d) d.dueDay = day;
   });
   saveState(); renderAll();
-  toast('Даты обновлены: 11 / 21 / 26');
+  toast('Даты обновлены: 11 / 16 / 26');
 }
 
 /* ============================================================
@@ -1496,7 +1499,7 @@ function renderStandup(){
 }
 
 /* ============================================================
-   RENDER — SCREENS (новая вкладка)
+   RENDER — SCREENS
 ============================================================ */
 async function renderScreens(){
   const screens = state.screens.slice().reverse();
@@ -1633,6 +1636,26 @@ async function handleScreenFiles(files){
   renderScreens();
 }
 
+function addManualBalRow(){
+  const container = document.getElementById('balContainer');
+  if(!container) return;
+  if(container.querySelector('.muted')) container.innerHTML = '';
+  const id = Date.now();
+  const div = document.createElement('div');
+  div.className = 'parsed-row';
+  div.innerHTML = `
+    <select name="balDebt_man_${id}" style="flex:1">
+      <option value="">— какая карта? —</option>
+      ${state.debts.filter(d=>d.current>0).map(d=>`
+        <option value="${d.id}">${esc(d.name)}</option>
+      `).join('')}
+    </select>
+    <input type="number" class="amt" name="balAmt_man_${id}" placeholder="Сумма" required>
+    <button type="button" class="btn ghost sm" onclick="this.parentElement.remove()">✕</button>
+  `;
+  container.appendChild(div);
+}
+
 function openOcrConfirmModal(meta){
   const p = meta.parsed || { balances:[], spends:[] };
 
@@ -1666,10 +1689,13 @@ function openOcrConfirmModal(meta){
     body: `
       <div class="muted small">Скрин: <b>${esc(meta.name)}</b></div>
 
-      ${balRows ? `
-        <div style="margin-top:.8rem"><b>💳 Балансы</b></div>
-        ${balRows}
-      ` : '<div class="muted small" style="margin-top:.6rem">Балансы не найдены</div>'}
+      <div style="margin-top:.8rem;display:flex;justify-content:space-between;align-items:center">
+        <b>💳 Балансы</b>
+        <button type="button" class="btn ghost sm" onclick="addManualBalRow()">+ Вручную</button>
+      </div>
+      <div id="balContainer">
+        ${balRows || '<div class="muted small" style="margin-top:.6rem">Балансы не найдены</div>'}
+      </div>
 
       ${spendRows ? `
         <div style="margin-top:.8rem"><b>💸 Траты</b></div>
@@ -1684,12 +1710,15 @@ function openOcrConfirmModal(meta){
     onSubmit: data => {
       let applied = 0;
 
-      p.balances.forEach((_,i)=>{
-        const debtId = data[`balDebt_${i}`];
-        const amt = Number(data[`balAmt_${i}`]);
-        if(debtId && amt > 0){
-          state.balances[debtId] = { amount: amt, updatedAt: new Date().toISOString() };
-          applied++;
+      Object.keys(data).forEach(k => {
+        if(k.startsWith('balDebt_')){
+          const suffix = k.replace('balDebt_', '');
+          const debtId = data[k];
+          const amt = Number(data[`balAmt_${suffix}`]);
+          if(debtId && amt > 0){
+            state.balances[debtId] = { amount: amt, updatedAt: new Date().toISOString() };
+            applied++;
+          }
         }
       });
 
@@ -1831,18 +1860,18 @@ function openPayModal(debtId){
   openModal({
     title: 'Платёж: ' + d.name,
     body: `
-      <div class="muted small">Остаток: <b>${fmt(d.current)}</b></div>
+      <div class="muted small">Остаток: <b>${fmt(dynCurrent(d))}</b></div>
       <label>Сумма, ₽</label>
       <input type="number" name="amount" value="${d.minPayment||''}" min="1" required autofocus>
       <div class="row" style="margin-top:.6rem">
         ${d.minPayment?`<button type="button" class="btn ghost sm" onclick="this.form.amount.value=${d.minPayment}">Мин. ${fmtN(d.minPayment)}</button>`:''}
-        <button type="button" class="btn ghost sm" onclick="this.form.amount.value=${d.current}">Всё (${fmtN(d.current)})</button>
+        <button type="button" class="btn ghost sm" onclick="this.form.amount.value=${Math.round(dynCurrent(d))}">Всё (${fmtN(dynCurrent(d))})</button>
       </div>
       <label>Заметка</label>
       <input name="note" placeholder="Например: с ЗП">
     `,
     submitText: 'Внести',
-        onSubmit: data => {
+    onSubmit: data => {
       const amt = Number(data.amount);
       if(!amt || amt<=0) return false;
 
@@ -2089,14 +2118,15 @@ $('#tabs').addEventListener('click', e=>{
   $$('.panel').forEach(p=>p.classList.toggle('active', p.id==='panel-'+b.dataset.tab));
 });
 
-function applyTheme(t){
+function applyTheme(t, save){
   document.documentElement.setAttribute('data-theme', t);
   state.settings.theme = t;
   $('#themeBtn').textContent = t==='dark' ? '☀️' : '🌙';
   document.querySelector('meta[name=theme-color]').content = t==='dark' ? '#0b1220' : '#f1f5f9';
-  saveState();
+  if(save !== false) saveState();
 }
-$('#themeBtn').addEventListener('click', ()=>{ applyTheme(state.settings.theme === 'dark' ? 'light' : 'dark'); });
+$('#themeBtn').addEventListener('click', ()=>{ applyTheme(state.settings.theme === 'dark' ? 'light' : 'dark', true); });
+
 $('#logoutBtn').addEventListener('click', async ()=>{
   if(!confirm('Выйти из аккаунта? Данные останутся в облаке.')) return;
   try{
@@ -2104,6 +2134,7 @@ $('#logoutBtn').addEventListener('click', async ()=>{
     location.reload();
   }catch(e){ alert('Ошибка: ' + e.message); }
 });
+
 $('#exportBtn').addEventListener('click', ()=>{
   const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
   const a = document.createElement('a');
@@ -2145,7 +2176,7 @@ $('#importFile').addEventListener('change', e=>{
     try{
       const data = JSON.parse(r.result);
       state = migrate(data);
-      saveState(); applyTheme(state.settings.theme||'dark'); renderAll();
+      saveState(); applyTheme(state.settings.theme||'dark', false); renderAll();
       toast('Импортировано');
     }catch(err){ toast('Ошибка импорта', 'err'); }
   };
@@ -2165,7 +2196,7 @@ function renderAll(){
   renderScreens();
   renderNotes();
 }
-applyTheme(state.settings.theme || 'dark');
+applyTheme(state.settings.theme || 'dark', false);
 renderAll();
 </script>
 </body>
