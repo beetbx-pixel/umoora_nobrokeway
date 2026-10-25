@@ -27,12 +27,18 @@ async function checkDebtsAndNotify() {
       for (const d of debts) {
         if (d.current <= 0 || !d.dueDay) continue;
 
-        // Считаем дату следующего платежа
+                // Считаем дату следующего платежа
         let due = new Date(today.getFullYear(), today.getMonth(), d.dueDay);
         if (due < today) due.setMonth(due.getMonth() + 1);
         
         const dateStr = due.toISOString().slice(0, 10);
-        if ((d.paidCycles || []).includes(dateStr)) continue; // Если уже оплачено — пропускаем
+        if ((d.paidCycles || []).includes(dateStr)) continue; // Если уже оплачено деньгами — пропускаем
+
+        // Если грейс закрыт кругами (прокруткой) — тоже пропускаем!
+        if (d.churn && d.churn.coveredAmount >= d.current) {
+            console.log(`Долг ${d.name} закрыт кругами, пропускаем.`);
+            continue;
+        }
 
         const daysUntil = Math.round((due - today) / 86400000);
         
