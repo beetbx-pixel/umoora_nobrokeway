@@ -937,7 +937,27 @@ function removeChurnRound(debtId, roundId){
   saveState(); renderAll();
   toast('Круг удалён', 'err');
 }
-
+function completeAllChurnRounds(debtId){
+  const d = state.debts.find(x=>x.id===debtId);
+  if(!d || !d.churn) return;
+  const info = churnInfo(d);
+  if(!info || info.remaining <= 0) return;
+  
+  if(!confirm(`Закрыть весь остаток (${fmt(info.remaining)}) одним кругом через Ozon?`)) return;
+  
+  if(!d.churn.rounds) d.churn.rounds = [];
+  d.churn.rounds.push({
+    id: 'c_all_'+Date.now(),
+    date: new Date().toISOString(),
+    amount: info.remaining,
+    tool: 'ozon',
+    note: 'Все круги сделаны'
+  });
+  d.churn.coveredAmount = (d.churn.coveredAmount || 0) + info.remaining;
+  if(!d.churn.cycleStart) d.churn.cycleStart = new Date().toISOString();
+  saveState(); renderAll();
+  toast('Все круги отмечены ✅');
+}
 function resetChurnCycle(debtId){
   const d = state.debts.find(x=>x.id===debtId);
   if(!d || !d.churn) return;
@@ -1007,9 +1027,10 @@ function renderChurnBlock(d){
             До дедлайна: <b>${i.daysLeft} ${plural(i.daysLeft,'день','дня','дней')}</b>
             ${i.perDayNeeded ? ` · ориентир <b style="color:var(--p5)">${i.perDayNeeded.toFixed(1)} кр./день</b>` : ''}
           </div>` : ''}
-        ${roundsList ? `<div style="margin-top:.5rem">${roundsList}</div>` : ''}
+                ${roundsList ? `<div style="margin-top:.5rem">${roundsList}</div>` : ''}
         <div class="row" style="margin-top:.6rem">
           <button class="btn primary sm" onclick="addChurnRound('${d.id}')">+ Записать круг</button>
+          <button class="btn success sm" onclick="completeAllChurnRounds('${d.id}')">✅ Все круги сделаны</button>
           <button class="btn ghost sm" onclick="resetChurnCycle('${d.id}')">Новый цикл</button>
         </div>
       `}
