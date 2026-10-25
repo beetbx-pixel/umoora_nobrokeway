@@ -402,15 +402,32 @@ function loadState(){
 }
 async function requestNotifications(){
   try {
-    const messaging = firebase.messaging();
-        // Регистрируем sw.js
-    if ('serviceWorker' in navigator) {
-      await navigator.serviceWorker.register('/umoora_nobrokeway/sw.js');
+    if(!firebase.messaging) {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js';
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
     }
+
+    // 1. Регистрируем наш Service Worker и запоминаем его
+    let swRegistration = null;
+    if ('serviceWorker' in navigator) {
+      swRegistration = await navigator.serviceWorker.register('/umoora_nobrokeway/sw.js');
+    }
+
+    const messaging = firebase.messaging();
     const permission = await Notification.requestPermission();
     
     if (permission === 'granted') {
-      const token = await messaging.getToken({ vapidKey: VAPID_KEY });
+      // 2. Передаем Firebase наш зарегистрированный Service Worker
+      const token = await messaging.getToken({ 
+        vapidKey: VAPID_KEY,
+        serviceWorkerRegistration: swRegistration 
+      });
+      
       if (token) {
         state.fcmToken = token;
         saveState();
