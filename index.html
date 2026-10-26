@@ -1220,10 +1220,8 @@ function renderOverview(){
       <div class="stat"><div class="stat-num" style="color:var(--p1)">${monthsToText(months)}</div><div class="stat-lbl">До нуля</div></div>
       <div class="stat"><div class="stat-num" style="color:${overLimit?'var(--p3)':'var(--p4)'}">${fmtN(todayTotal)} ₽</div><div class="stat-lbl">Потрачено сегодня</div></div>
       <div class="stat"><div class="stat-num" style="color:var(--p4)">${fmtN(avail)} ₽</div><div class="stat-lbl">На долги/мес</div></div>
-            <div class="stat" style="grid-column: span 2;">
-        <div class="stat-num" style="color:var(--p5)">${calculateNoSpendStreak()} 🔥</div>
-        <div class="stat-lbl">Дней без трат</div>
-      </div>
+      <div class="stat"><div class="stat-num" style="color:var(--p5)">${calculateNoSpendStreak()} 🔥</div><div class="stat-lbl">Дней без трат</div></div>
+      <div class="stat"><div class="stat-num" style="color:var(--p3)">${state.spends.filter(s => s.amount < 0).length}</div><div class="stat-lbl">Всего трат</div></div>
     </div>
                
     ${next ? (() => {
