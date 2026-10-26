@@ -1130,14 +1130,7 @@ function renderOverview(){
     </div>
 
     ${renderReserve()}
-
-    <div class="stats-grid">
-      <div class="stat"><div class="stat-num" style="color:var(--p2)">${fmt(paid)}</div><div class="stat-lbl">Выплачено</div></div>
-      <div class="stat"><div class="stat-num" style="color:var(--p1)">${monthsToText(months)}</div><div class="stat-lbl">До нуля</div></div>
-      <div class="stat"><div class="stat-num" style="color:${overLimit?'var(--p3)':'var(--p4)'}">${fmtN(todayTotal)} ₽</div><div class="stat-lbl">Потрачено сегодня</div></div>
-      <div class="stat"><div class="stat-num" style="color:var(--p4)">${fmtN(avail)} ₽</div><div class="stat-lbl">На долги/мес</div></div>
-    </div>
-               <div class="card">
+    <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.7rem">
         <h3 style="margin:0">💳 Балансы карт</h3>
         <button class="btn ghost sm" onclick="openUpdateBalancesModal()">Обновить</button>
@@ -1154,6 +1147,13 @@ function renderOverview(){
         }).join('')}
       </div>
     </div>
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-num" style="color:var(--p2)">${fmt(paid)}</div><div class="stat-lbl">Выплачено</div></div>
+      <div class="stat"><div class="stat-num" style="color:var(--p1)">${monthsToText(months)}</div><div class="stat-lbl">До нуля</div></div>
+      <div class="stat"><div class="stat-num" style="color:${overLimit?'var(--p3)':'var(--p4)'}">${fmtN(todayTotal)} ₽</div><div class="stat-lbl">Потрачено сегодня</div></div>
+      <div class="stat"><div class="stat-num" style="color:var(--p4)">${fmtN(avail)} ₽</div><div class="stat-lbl">На долги/мес</div></div>
+    </div>
+               
     ${next ? (() => {
       const dd = daysUntil(next.date);
       const urgent = dd <= 3 && next.type === 'payment';
