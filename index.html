@@ -232,6 +232,7 @@ const DEFAULT_STATE = {
       churn:{ enabled:true, coveredAmount:0, rounds:[], cycleStart:null, avgRound:50000 } },
     { id:'father',  name:'Отец', initial:50000, current:50000, rate:0, minPayment:0, dueDay:null, statementDay:null, priority:5, color:'#6366f1', note:'Как получится' },
     { id:'alfa',    name:'Альфа 20к (Моор)', initial:19480, current:19480, rate:58.99, minPayment:600, dueDay:13, statementDay:null, priority:6, color:'#ef4444', note:'58,99% · грейс до 03.12.2026 · страховка отключена' }
+    { id:'debit_sister', name:'Дебетовая (сестра)', initial:0, current:0, rate:0, minPayment:0, dueDay:null, statementDay:null, priority:7, color:'#10b981', note:'Для переводов/кругов', isDebit:true }
   ],
   oneTime: [
     { id:'deposit',  name:'Залог за квартиру (1/2)', amount:35000 },
@@ -773,7 +774,7 @@ function addReserveIncome(){
 }
 
 function addReserveTransfer(){
-  const active = state.debts.filter(d => d.current > 0);
+    const active = state.debts.filter(d => d.current > 0 || d.isDebit);
   if(!active.length){ toast('Нет активных долгов', 'err'); return; }
   openModal({
     title: 'Перевести из резерва',
@@ -1136,7 +1137,7 @@ function renderOverview(){
         <button class="btn ghost sm" onclick="openUpdateBalancesModal()">Обновить</button>
       </div>
       <div class="balance-grid">
-        ${state.debts.filter(d=>d.current>0).map(d=>{
+        ${state.debts.filter(d=>d.current>0 || d.isDebit).map(d=>{
           const b = state.balances[d.id];
           return `
             <div class="balance-card">
@@ -1230,7 +1231,7 @@ function renderChart(series){
    RENDER — DEBTS
 ============================================================ */
 function renderDebts(){
-  const sorted = [...state.debts].sort((a,b)=>a.priority-b.priority);
+  const sorted = [...state.debts].filter(d => !d.isDebit).sort((a,b)=>a.priority-b.priority);
   const list = sorted.map(d=>{
     const paid = Math.max(0, d.initial - d.current);
     const pct = d.initial ? (paid/d.initial*100) : 0;
