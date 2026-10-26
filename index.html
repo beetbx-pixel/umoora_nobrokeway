@@ -1591,7 +1591,7 @@ async function renderScreens(){
   const limit = dailyLimit();
   const overLimit = todayTotal > limit;
 
-  const balanceHtml = state.debts.filter(d=>d.current>0).map(d=>{
+    const balanceHtml = state.debts.filter(d=>d.current>0 || d.isDebit).map(d=>{
     const b = state.balances[d.id];
     return `
       <div class="balance-card">
@@ -1683,8 +1683,68 @@ async function renderScreens(){
     fi.onchange = e => handleScreenFiles([...e.target.files]);
   }
 }
+let wizardDebts = [];
+let wizardIndex = 0;
 
-async function handleScreenFiles(files){
+function startOcrWizard() {
+  wizardDebts = state.debts.filter(d => d.current > 0 && !d.isDebit);
+  wizardIndex = 0;
+  if(wizardDebts.length === 0) {
+    toast('Нет активных долгов для обхода', 'err');
+    return;
+  }
+  showWizardStep();
+}
+
+function showWizardStep() {
+  if (wizardIndex >= wizardDebts.length) {
+    toast('Все карты обойдены ✅');
+    wizardDebts = []; // Сбрасываем
+    renderAll();
+    return;
+  }
+  
+  const currentDebt = wizardDebts[wizardIndex];
+  
+  openModal({
+    title: `Мастер: Шаг ${wizardIndex + 1} из ${wizardDebts.length}`,
+    body: `
+      <div class="muted small" style="margin-bottom:.8rem">Осталось обойти карт: ${wizardDebts.length - wizardIndex}</div>
+      <div style="background:var(--bg);padding:1rem;border-radius:10px;border:1px solid var(--border);text-align:center">
+        <h3 style="margin:0 0 .5rem">${esc(currentDebt.name)}</h3>
+        <div class="muted small" style="margin-bottom:1rem">Нажми кнопку ниже и выбери скрин из банка для этой карты.</div>
+        <input type="file" id="wizardFile" accept="image/*" style="display:none">
+        <button type="button" class="btn primary" style="width:100%" onclick="document.getElementById('wizardFile').click()">📷 Загрузить скрин</button>
+      </div>
+      <div class="row" style="margin-top:1rem;justify-content:space-between">
+        <button type="button" class="btn ghost sm" onclick="skipWizardStep()">Пропустить (нет трат)</button>
+      </div>
+    `,
+    submitText: 'Закрыть мастер',
+    onSubmit: () => {
+      wizardDebts = []; // Сбрасываем при закрытии
+      toast('Мастер завершен');
+    }
+  });
+
+  setTimeout(() => {
+    const inp = document.getElementById('wizardFile');
+    if(inp) {
+      inp.onchange = (e) => {
+        const file = e.target.files[0];
+        if(file) {
+          handleScreenFiles([file], currentDebt.id); 
+        }
+      };
+    }
+  }, 100);
+}
+
+function skipWizardStep() {
+  wizardIndex++;
+  showWizardStep();
+}
+async function handleScreenFiles(files, forcedDebtId = null){
   const imgs = files.filter(f => f.type.startsWith('image/'));
   if(!imgs.length) return;
   const status = $('#ocrStatus');
@@ -1701,10 +1761,11 @@ async function handleScreenFiles(files){
         }
       });
       const parsed = parseOCRText(text);
-      const meta = {
+            const meta = {
         id, name: file.name, size: file.size, mime: file.type,
         addedAt: new Date().toISOString(),
-        ocrText: text, parsed
+        ocrText: text, parsed,
+        forcedDebtId: forcedDebtId // Запоминаем карту, если мы в мастере
       };
       await idbPut({ id, blob: file });
       state.screens.push(meta);
@@ -1805,7 +1866,7 @@ function openOcrConfirmModal(meta){
     title: 'Проверь распознанное',
     submitText: 'Применить',
     body: `
-      <div style="background:var(--bg);padding:.6rem;border-radius:8px;border:1px solid var(--border);margin-bottom:.8rem">
+      ${!meta.forcedDebtId ? '<div style="background:var(--bg);padding:.6rem;border-radius:8px;border:1px solid var(--border);margin-bottom:.8rem">' : '<div style="display:none">'}
         <label style="margin-top:0">К какой карте относится этот скрин?</label>
         <div class="row">
           <select id="globalCardSelect" style="flex:1">
@@ -1890,6 +1951,10 @@ function openOcrConfirmModal(meta){
             
       saveState(); renderAll();
       toast(`Применено записей: ${applied}`);
+            if (meta.forcedDebtId && typeof wizardIndex !== 'undefined' && wizardDebts.length > 0) {
+        wizardIndex++;
+        setTimeout(showWizardStep, 400);
+      }
     }
   });
 }
