@@ -1074,6 +1074,38 @@ function churnBanner(){
 /* ============================================================
    RENDER — OVERVIEW
 ============================================================ */
+  function openUpdateBalancesModal(){
+  const active = state.debts.filter(d => d.current > 0);
+  const rows = active.map(d => {
+    const b = state.balances[d.id];
+    return `
+      <div class="row" style="justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border)">
+        <span>${esc(d.name)}</span>
+        <input type="number" name="bal_${d.id}" value="${b ? b.amount : ''}" placeholder="0" style="width:120px;text-align:right">
+      </div>`;
+  }).join('');
+
+  openModal({
+    title: 'Обновить балансы',
+    body: `
+      <div class="muted small" style="margin-bottom:.6rem">Введи реальные остатки (доступные деньги) по картам.</div>
+      ${rows}
+    `,
+    submitText: 'Сохранить',
+    onSubmit: data => {
+      let updated = 0;
+      active.forEach(d => {
+        const val = Number(data[`bal_${d.id}`]);
+        if(!isNaN(val) && val >= 0) {
+          state.balances[d.id] = { amount: val, updatedAt: new Date().toISOString() };
+          updated++;
+        }
+      });
+      saveState(); renderAll();
+      if(updated) toast('Балансы обновлены ✅');
+    }
+  });
+}
 function renderOverview(){
   const total = totalCurrent();
   const initial = totalInitial();
@@ -1105,7 +1137,23 @@ function renderOverview(){
       <div class="stat"><div class="stat-num" style="color:${overLimit?'var(--p3)':'var(--p4)'}">${fmtN(todayTotal)} ₽</div><div class="stat-lbl">Потрачено сегодня</div></div>
       <div class="stat"><div class="stat-num" style="color:var(--p4)">${fmtN(avail)} ₽</div><div class="stat-lbl">На долги/мес</div></div>
     </div>
-           
+               <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.7rem">
+        <h3 style="margin:0">💳 Балансы карт</h3>
+        <button class="btn ghost sm" onclick="openUpdateBalancesModal()">Обновить</button>
+      </div>
+      <div class="balance-grid">
+        ${state.debts.filter(d=>d.current>0).map(d=>{
+          const b = state.balances[d.id];
+          return `
+            <div class="balance-card">
+              <div class="n">${esc(d.name)}</div>
+              <div class="v" style="color:${d.color}">${b ? fmt(b.amount) : '—'}</div>
+              <div class="d">${b ? 'обн. ' + fmtDate(b.updatedAt) : 'нет данных'}</div>
+            </div>`;
+        }).join('')}
+      </div>
+    </div>
     ${next ? (() => {
       const dd = daysUntil(next.date);
       const urgent = dd <= 3 && next.type === 'payment';
