@@ -463,6 +463,19 @@ function migrate(s){
     const debitCard = d.debts.find(x => x.id === 'debit_sister');
     if (debitCard) out.debts.push(structuredClone(debitCard));
   }
+    // Добавляем номера карт в виде массива, если их нет
+  const cardNumbers = {
+    'cc400': ['4615'],
+    'cc255': ['0456', '6540', '1902'],
+    'alfa': ['1912']
+  };
+  
+  Object.keys(cardNumbers).forEach(id => {
+    const debt = out.debts.find(d => d.id === id);
+    if (debt) {
+      debt.last4 = cardNumbers[id]; // Сохраняем как массив
+    }
+  });
   return out;
 }
 
@@ -531,10 +544,39 @@ function parseOCRText(text){
   const result = { balances: [], spends: [] };
   if(!text) return result;
 
-  // Убираем переносы строк, чтобы искать в сплошном тексте
-  const flatText = text.replace(/\n/g, ' ');
+  // --- 1. ПАРСИНГ БАЛАНСОВ (построчно) ---
+  const lines = text.split(/\n+/).map(l=>l.trim()).filter(Boolean);
+  const balanceRx = /(?:доступно|баланс|остаток|итого|к оплате|платинум)[^\d]{0,20}([\d\s]{3,15}[.,]?\d{0,2})\s*(?:₽|руб|р\.?|Р|P)/i;
+  const rawAmountRx = /^([\d\s]{3,15}[.,]\d{2})\s*(?:₽|руб|р\.?|Р|P)$/i;
 
-  // Ищем все транзакции (+ и -). Ловим как ₽, так и буквы P/Р, которые выдает OCR
+  for(const line of lines){
+    let bm = line.match(balanceRx);
+    if(!bm && line.length < 20){
+      const rm = line.match(rawAmountRx);
+      if(rm) bm = rm;
+    }
+    if(bm){
+      const amount = parseFloat(bm[1].replace(/\s/g,'').replace(',','.'));
+      if(!isNaN(amount) && amount > 100){
+        const lower = line.toLowerCase();
+        let matched = null;
+        
+        // Ищем последние 4 цифры карты
+        for(const d of state.debts){
+          if(d.last4 && Array.isArray(d.last4)){
+            if(d.last4.some(num => lower.includes(num))){
+              matched = d.id;
+              break;
+            }
+          }
+        }
+        result.balances.push({ cardName: line, amount, matchedDebtId: matched });
+      }
+    }
+  }
+
+  // --- 2. ПАРСИНГ ТРАТ (сплошной текст) ---
+  const flatText = text.replace(/\n/g, ' ');
   const txRx = /([+−-])\s*([\d\s]{2,12}[.,]?\d{0,2})\s*(?:₽|руб|р\.?|Р|P)/gi;
   let tm;
   while ((tm = txRx.exec(flatText)) !== null) {
@@ -545,7 +587,6 @@ function parseOCRText(text){
 
     if (sign === '-' || sign === '−') amount = -amount;
 
-    // Берем кусочек текста перед суммой, чтобы найти название магазина
     const startIdx = Math.max(0, tm.index - 25);
     let context = flatText.substring(startIdx, tm.index).trim();
     
