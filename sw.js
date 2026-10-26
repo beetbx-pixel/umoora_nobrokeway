@@ -1,4 +1,4 @@
-const CACHE_NAME = 'umoora-tracker-v19';
+const CACHE_NAME = 'umoora-tracker-v20';
 const ASSETS = [
   '/umoora_nobrokeway/',
   '/umoora_nobrokeway/index.html',
