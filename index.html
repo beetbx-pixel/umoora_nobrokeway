@@ -1153,6 +1153,27 @@ function churnBanner(){
     }
   });
 }
+  function calculateNoSpendStreak(){
+  let streak = 0;
+  let checkDate = new Date();
+  checkDate.setHours(0,0,0,0);
+  
+  while(true){
+    const checkStr = checkDate.toDateString();
+    // Ищем траты за этот день (где amount < 0)
+    const hasSpend = state.spends.some(s => {
+      return new Date(s.date).toDateString() === checkStr && s.amount < 0;
+    });
+    
+    if(hasSpend) break; // Если нашли трату, серия прерывается
+    
+    streak++;
+    checkDate.setDate(checkDate.getDate() - 1); // Шагаем на день назад
+    
+    if(streak > 365) break; // Защита от бесконечного цикла
+  }
+  return streak;
+}
 function renderOverview(){
   const total = totalCurrent();
   const initial = totalInitial();
@@ -1199,6 +1220,10 @@ function renderOverview(){
       <div class="stat"><div class="stat-num" style="color:var(--p1)">${monthsToText(months)}</div><div class="stat-lbl">До нуля</div></div>
       <div class="stat"><div class="stat-num" style="color:${overLimit?'var(--p3)':'var(--p4)'}">${fmtN(todayTotal)} ₽</div><div class="stat-lbl">Потрачено сегодня</div></div>
       <div class="stat"><div class="stat-num" style="color:var(--p4)">${fmtN(avail)} ₽</div><div class="stat-lbl">На долги/мес</div></div>
+            <div class="stat" style="grid-column: span 2;">
+        <div class="stat-num" style="color:var(--p5)">${calculateNoSpendStreak()} 🔥</div>
+        <div class="stat-lbl">Дней без трат</div>
+      </div>
     </div>
                
     ${next ? (() => {
