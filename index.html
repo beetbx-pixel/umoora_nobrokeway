@@ -458,6 +458,11 @@ function migrate(s){
     const dd = out.debts.find(x=>x.id===id);
     if(dd && !dd.churn) dd.churn = { enabled:true, coveredAmount:0, rounds:[], cycleStart:null, avgRound:50000 };
   });
+    // Принудительно добавляем дебетовую карту, если её еще нет в базе
+  if (!out.debts.find(x => x.id === 'debit_sister')) {
+    const debitCard = d.debts.find(x => x.id === 'debit_sister');
+    if (debitCard) out.debts.push(structuredClone(debitCard));
+  }
   return out;
 }
 
