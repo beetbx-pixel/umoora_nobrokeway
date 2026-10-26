@@ -1699,7 +1699,7 @@ function startOcrWizard() {
 function showWizardStep() {
   if (wizardIndex >= wizardDebts.length) {
     toast('Все карты обойдены ✅');
-    wizardDebts = []; // Сбрасываем
+    wizardDebts = []; 
     renderAll();
     return;
   }
@@ -1712,17 +1712,18 @@ function showWizardStep() {
       <div class="muted small" style="margin-bottom:.8rem">Осталось обойти карт: ${wizardDebts.length - wizardIndex}</div>
       <div style="background:var(--bg);padding:1rem;border-radius:10px;border:1px solid var(--border);text-align:center">
         <h3 style="margin:0 0 .5rem">${esc(currentDebt.name)}</h3>
-        <div class="muted small" style="margin-bottom:1rem">Нажми кнопку ниже и выбери скрин из банка для этой карты.</div>
-        <input type="file" id="wizardFile" accept="image/*" style="display:none">
-        <button type="button" class="btn primary" style="width:100%" onclick="document.getElementById('wizardFile').click()">📷 Загрузить скрин</button>
+        <div class="muted small" style="margin-bottom:1rem">Загрузи все скрины для этой карты (можно выбрать сразу несколько).</div>
+        <input type="file" id="wizardFile" accept="image/*" multiple style="display:none">
+        <button type="button" class="btn primary" style="width:100%" onclick="document.getElementById('wizardFile').click()">📷 Выбрать скрины</button>
       </div>
       <div class="row" style="margin-top:1rem;justify-content:space-between">
-        <button type="button" class="btn ghost sm" onclick="skipWizardStep()">Пропустить (нет трат)</button>
+        <button type="button" class="btn success" style="flex:1" onclick="nextWizardStep()">Дальше (я загрузил всё) ➡️</button>
+        <button type="button" class="btn ghost sm" onclick="skipWizardStep()">Пропустить карту</button>
       </div>
     `,
     submitText: 'Закрыть мастер',
     onSubmit: () => {
-      wizardDebts = []; // Сбрасываем при закрытии
+      wizardDebts = []; 
       toast('Мастер завершен');
     }
   });
@@ -1731,13 +1732,18 @@ function showWizardStep() {
     const inp = document.getElementById('wizardFile');
     if(inp) {
       inp.onchange = (e) => {
-        const file = e.target.files[0];
-        if(file) {
-          handleScreenFiles([file], currentDebt.id); 
+        const files = [...e.target.files];
+        if(files.length > 0) {
+          handleScreenFiles(files, currentDebt.id); 
         }
       };
     }
   }, 100);
+}
+
+function nextWizardStep() {
+  wizardIndex++;
+  showWizardStep();
 }
 
 function skipWizardStep() {
@@ -1951,10 +1957,6 @@ function openOcrConfirmModal(meta){
             
       saveState(); renderAll();
       toast(`Применено записей: ${applied}`);
-            if (meta.forcedDebtId && typeof wizardIndex !== 'undefined' && wizardDebts.length > 0) {
-        wizardIndex++;
-        setTimeout(showWizardStep, 400);
-      }
     }
   });
 }
