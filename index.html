@@ -779,7 +779,7 @@ function addReserveIncome(){
 }
 
 function addReserveTransfer(){
-    const active = state.debts.filter(d => d.current > 0 || d.isDebit);
+      const active = state.debts.filter(d => d.current > 0);
   if(!active.length){ toast('Нет активных долгов', 'err'); return; }
   openModal({
     title: 'Перевести из резерва',
@@ -1081,7 +1081,7 @@ function churnBanner(){
    RENDER — OVERVIEW
 ============================================================ */
   function openUpdateBalancesModal(){
-  const active = state.debts.filter(d => d.current > 0);
+    const active = state.debts.filter(d => d.current > 0 || d.isDebit);;
   const rows = active.map(d => {
     const b = state.balances[d.id];
     return `
