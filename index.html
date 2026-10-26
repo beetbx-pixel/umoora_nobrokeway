@@ -1630,8 +1630,9 @@ async function renderScreens(){
   }))).join('') : '<div class="muted small">Скринов пока нет</div>';
 
   $('#panel-screens').innerHTML = `
-    <div class="card">
+        <div class="card">
       <h3>📸 Загрузить скрин</h3>
+      <button class="btn success" style="width:100%;margin-bottom:.8rem" onclick="startOcrWizard()">✨ Запустить мастер загрузки</button>
       <div class="drop-zone" id="dropZone">
         <div class="ico">📷</div>
         <div class="t">Нажми или перетащи скрин</div>
