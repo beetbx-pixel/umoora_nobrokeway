@@ -793,11 +793,18 @@ function renderReserve(){
 }
 
 function addReserveIncome(){
+  const active = state.debts.filter(d => d.current > 0 && !d.isDebit);
+  
   openModal({
     title: 'Пополнить резерв',
     body: `
       <label>Сумма, ₽</label>
       <input type="number" name="amount" value="10000" min="1" required autofocus>
+      <label>На какой долг откладываем? (Конверт)</label>
+      <select name="debtId">
+        <option value="">— В общий котёл (без цели) —</option>
+        ${active.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('')}
+      </select>
       <label>Заметка</label>
       <input name="note" placeholder="ЗП, подработка…">
     `,
@@ -805,20 +812,29 @@ function addReserveIncome(){
     onSubmit: data => {
       const amt = Number(data.amount);
       if(!amt || amt <= 0) return false;
+      
       state.reserve.balance += amt;
+      
+      // Если выбрали долг, добавляем в конверт этого долга
+      if(data.debtId) {
+        const d = state.debts.find(x => x.id === data.debtId);
+        if(d) {
+          d.reservedAmount = (d.reservedAmount || 0) + amt;
+        }
+      }
+
       state.reserve.log.push({
         id: 'r_'+Date.now(),
         date: new Date().toISOString(),
         type: 'in',
         amount: amt,
-        note: data.note || ''
+        note: (data.note || '') + (data.debtId ? ` (на ${state.debts.find(x=>x.id===data.debtId).name})` : '')
       });
       saveState(); renderAll();
       toast(`Резерв +${fmt(amt)}`);
     }
   });
 }
-
 function addReserveTransfer(){
       const active = state.debts.filter(d => d.current > 0);
   if(!active.length){ toast('Нет активных долгов', 'err'); return; }
@@ -838,12 +854,15 @@ function addReserveTransfer(){
     onSubmit: data => {
       const amt = Number(data.amount);
       if(!amt || amt <= 0) return false;
-      if(amt > state.reserve.balance){ toast('Больше, чем в резерве', 'err'); return false; }
+            if(amt > state.reserve.balance){ toast('Больше, чем в резерве', 'err'); return false; }
+      
       const d = state.debts.find(x => x.id === data.debtId);
       if(!d){ toast('Долг не найден', 'err'); return false; }
 
+      // Списываем из конверта этого долга
+      d.reservedAmount = Math.max(0, (d.reservedAmount || 0) - amt);
+      
       state.reserve.balance -= amt;
-
       const before = dynCurrent(d);
       const after = Math.max(0, before - amt);
       if(d.dailyRate && d.baseDate){
@@ -1322,6 +1341,12 @@ function renderDebts(){
           ${d.statementDay ? `<span class="chip">выписка ${d.statementDay}-го</span>` : ''}
         </div>
         ${d.note ? `<div class="muted small" style="margin-bottom:.3rem">${esc(d.note)}</div>` : ''}
+                ${(d.reservedAmount && d.reservedAmount > 0) ? `
+          <div style="background:rgba(22,163,74,.1);border:1px solid var(--p2);border-radius:8px;padding:.4rem .6rem;margin-bottom:.4rem;display:flex;justify-content:space-between;align-items:center">
+            <span class="muted small">💼 Отложено в резерве:</span>
+            <b style="color:var(--p2)">${fmt(d.reservedAmount)}</b>
+          </div>
+        ` : ''}
         <div class="progress"><div class="progress-fill" style="width:${pct}%;background:${closed?'var(--p2)':d.color}"></div></div>
         ${renderChurnBlock(d)}
         <div class="row" style="margin-top:.6rem">
