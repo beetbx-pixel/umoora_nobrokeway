@@ -2156,9 +2156,23 @@ function openPayModal(debtId){
       const amt = Number(data.amount);
       if(!amt || amt<=0) return false;
 
-      const before = dynCurrent(d);
-      const after = Math.max(0, before - amt);
+            const before = dynCurrent(d);
+      let after = before;
 
+      // Если у долга есть ставка (как у кредита 40%), считаем проценты
+      if (d.rate > 0) {
+        const monthlyRate = d.rate / 100 / 12; // Месячная ставка
+        const interest = before * monthlyRate; // Сколько уходит банку на проценты
+        const bodyPay = amt - interest; // Сколько реально уходит в тело долга
+        
+        if (bodyPay > 0) {
+          after = Math.max(0, before - bodyPay);
+        } else {
+          after = before; // Если платёж меньше процентов, долг даже растёт, но мы не будем его увеличивать в трекере
+        }
+      } else {
+        after = Math.max(0, before - amt); // Для карт без процентов
+      }
       if(d.dailyRate && d.baseDate){
         if(after <= 1){
           d.baseAmount = 0;
