@@ -774,9 +774,9 @@ function renderReserve(){
         ${op.type === 'in' ? '⬆ пополнение' : '⬇ ' + esc(op.target || '—')}
         ${op.note ? ' · ' + esc(op.note) : ''}
       </span>
-            <span style="color:${op.type === 'in' ? 'var(--p2)' : 'var(--p3)'}; display:flex; align-items:center; gap:.5rem">
+      <span style="color:${op.type === 'in' ? 'var(--p2)' : 'var(--p3)'}; display:flex; align-items:center; gap:.5rem">
         <b>${op.type === 'in' ? '+' : '−'}${fmtN(op.amount)} ₽</b>
-        ${op.type === 'in' ? `<button class="btn ghost sm" style="padding:0 .3rem; height:22px; font-size:.7rem; color:var(--p3)" onclick="undoReserveLog('${op.id}')">✕</button>` : ''}
+        ${op.type === 'in' ? `<button type="button" class="btn ghost sm" style="padding:0 .3rem; height:22px; font-size:.7rem; color:var(--p3)" onclick="undoReserveLog('${op.id}')">✕</button>` : ''}
       </span>
     </div>`).join('') : '<div class="muted small">Операций нет</div>';
 
@@ -792,23 +792,20 @@ function renderReserve(){
       ${recent.length ? `<div style="margin-top:.8rem"><div class="muted small" style="margin-bottom:.3rem"><b>История</b></div>${logHtml}</div>` : ''}
     </div>`;
 }
+
 function undoReserveLog(id) {
   const logItem = state.reserve.log.find(x => x.id === id);
   if(!logItem) return;
   if(!confirm('Отменить эту операцию?')) return;
 
   if(logItem.type === 'in') {
-    // Уменьшаем баланс резерва
     state.reserve.balance -= logItem.amount;
-    
-    // Если операция была привязана к долгу, отнимаем из конверта
     if(logItem.debtId) {
       const d = state.debts.find(x => x.id === logItem.debtId);
       if(d) d.reservedAmount = Math.max(0, (d.reservedAmount || 0) - logItem.amount);
     }
   } else if(logItem.type === 'out') {
-    // Если это был перевод на кредитку, отменять его нужно через историю платежей!
-    toast('Чтобы отменить перевод, зайдите в Историю платежей на вкладке Долги', 'err');
+    toast('Чтобы отменить перевод, зайдите в Историю платежей', 'err');
     return;
   }
 
@@ -816,6 +813,7 @@ function undoReserveLog(id) {
   saveState(); renderAll();
   toast('Операция отменена');
 }
+
 function addReserveIncome(){
   const active = state.debts.filter(d => d.current > 0 && !d.isDebit);
   
@@ -839,15 +837,12 @@ function addReserveIncome(){
       
       state.reserve.balance += amt;
       
-      // Если выбрали долг, добавляем в конверт этого долга
       if(data.debtId) {
         const d = state.debts.find(x => x.id === data.debtId);
-        if(d) {
-          d.reservedAmount = (d.reservedAmount || 0) + amt;
-        }
+        if(d) d.reservedAmount = (d.reservedAmount || 0) + amt;
       }
 
-            state.reserve.log.push({
+      state.reserve.log.push({
         id: 'r_'+Date.now(),
         date: new Date().toISOString(),
         type: 'in',
@@ -855,9 +850,14 @@ function addReserveIncome(){
         debtId: data.debtId || null,
         note: (data.note || '') + (data.debtId ? ` (на ${state.debts.find(x=>x.id===data.debtId).name})` : '')
       });
+      saveState(); renderAll();
+      toast(`Резерв +${fmt(amt)}`);
+    }
+  });
 }
+
 function addReserveTransfer(){
-      const active = state.debts.filter(d => d.current > 0);
+  const active = state.debts.filter(d => d.current > 0);
   if(!active.length){ toast('Нет активных долгов', 'err'); return; }
   openModal({
     title: 'Перевести из резерва',
@@ -875,15 +875,15 @@ function addReserveTransfer(){
     onSubmit: data => {
       const amt = Number(data.amount);
       if(!amt || amt <= 0) return false;
-            if(amt > state.reserve.balance){ toast('Больше, чем в резерве', 'err'); return false; }
+      if(amt > state.reserve.balance){ toast('Больше, чем в резерве', 'err'); return false; }
       
       const d = state.debts.find(x => x.id === data.debtId);
       if(!d){ toast('Долг не найден', 'err'); return false; }
 
-      // Списываем из конверта этого долга
       d.reservedAmount = Math.max(0, (d.reservedAmount || 0) - amt);
       
       state.reserve.balance -= amt;
+
       const before = dynCurrent(d);
       const after = Math.max(0, before - amt);
       if(d.dailyRate && d.baseDate){
