@@ -1651,6 +1651,17 @@ function renderStandup(){
       Опен-мик ${i+1}
     </label>`).join('');
 
+  const jokes = (state.jokes || []).slice().reverse();
+  const jokesHtml = jokes.length ? jokes.map(j => `
+    <div class="note" style="margin-bottom:.6rem">
+      <div class="note-title">${esc(j.title)}</div>
+      <div class="note-text" style="margin:.3rem 0">${esc(j.text)}</div>
+      <div>${(j.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>
+      <div class="row" style="margin-top:.4rem">
+        <button class="btn danger sm" onclick="deleteJoke('${j.id}')">Удалить</button>
+      </div>
+    </div>`).join('') : '<div class="muted small">Пока нет записанных шуток. Самое время начать!</div>';
+
   $('#panel-standup').innerHTML = `
     <div class="card">
       <h3>Расписание недели</h3>
@@ -1683,30 +1694,21 @@ function renderStandup(){
     </div>
 
     <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.7rem">
+        <h3 style="margin:0">🎤 Мои шутки</h3>
+        <button class="btn primary sm" onclick="openAddJokeModal()">+ Записать</button>
+      </div>
+      ${jokesHtml}
+    </div>
+
+    <div class="card">
       <h3>План монетизации</h3>
       <div class="cal-item"><div class="cal-date c-statement"><div class="d">1–6</div><div class="m">мес</div></div><div class="cal-body"><div class="cal-title">Стендап 0 ₽, нейро — изучаю</div><div class="cal-sub">Фокус: 15 мин материала + 4 опен-мика/нед</div></div></div>
       <div class="cal-item"><div class="cal-date c-payment"><div class="d">6–12</div><div class="m">мес</div></div><div class="cal-body"><div class="cal-title">Первые споты: 5–10к/мес</div><div class="cal-sub">+ первые нейро-видео</div></div></div>
       <div class="cal-item"><div class="cal-date c-risk"><div class="d">12–18</div><div class="m">мес</div></div><div class="cal-body"><div class="cal-title">2–3 выступления/нед: 10–15к/мес</div><div class="cal-sub">+ нейро на потоке</div></div></div>
     </div>
-
-    <div class="card">
-      <h3>Темы для шуток</h3>
-      <div class="muted small">
-        • Юристы за 47к «через друга»<br>
-        • Грейс-период, выписка, «а вдруг не успею»<br>
-        • 15-часовые смены и попытки быть комиком<br>
-        • 40% годовых как личный антирекорд<br>
-        • Штраф 16к за недовнесённый платёж<br>
-        • Жизнь с Аней, аренда, делёжка 50/50<br>
-        • Нейронки, которые должны спасти
-      </div>
-    </div>
   `;
 }
-
-/* ============================================================
-   RENDER — SCREENS
-============================================================ */
 async function renderScreens(){
   const screens = state.screens.slice().reverse();
   const todayStr = new Date().toDateString();
