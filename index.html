@@ -1203,6 +1203,9 @@ function renderOverview(){
         <h3 style="margin:0">💳 Балансы карт</h3>
         <button class="btn ghost sm" onclick="openUpdateBalancesModal()">Обновить</button>
       </div>
+         <div class="muted small" style="margin-bottom:.8rem">
+        Всего в наличии: <b style="color:var(--p2);font-size:1.2rem">${fmt(state.debts.reduce((sum, d) => sum + (state.balances[d.id] ? state.balances[d.id].amount : 0), 0))}</b>
+      </div>
       <div class="balance-grid">
         ${state.debts.filter(d=>d.current>0 || d.isDebit).map(d=>{
           const b = state.balances[d.id];
