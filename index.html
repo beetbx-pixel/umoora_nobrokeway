@@ -774,8 +774,9 @@ function renderReserve(){
         ${op.type === 'in' ? '⬆ пополнение' : '⬇ ' + esc(op.target || '—')}
         ${op.note ? ' · ' + esc(op.note) : ''}
       </span>
-      <span style="color:${op.type === 'in' ? 'var(--p2)' : 'var(--p3)'}">
+            <span style="color:${op.type === 'in' ? 'var(--p2)' : 'var(--p3)'}; display:flex; align-items:center; gap:.5rem">
         <b>${op.type === 'in' ? '+' : '−'}${fmtN(op.amount)} ₽</b>
+        ${op.type === 'in' ? `<button class="btn ghost sm" style="padding:0 .3rem; height:22px; font-size:.7rem; color:var(--p3)" onclick="undoReserveLog('${op.id}')">✕</button>` : ''}
       </span>
     </div>`).join('') : '<div class="muted small">Операций нет</div>';
 
