@@ -792,7 +792,30 @@ function renderReserve(){
       ${recent.length ? `<div style="margin-top:.8rem"><div class="muted small" style="margin-bottom:.3rem"><b>История</b></div>${logHtml}</div>` : ''}
     </div>`;
 }
+function undoReserveLog(id) {
+  const logItem = state.reserve.log.find(x => x.id === id);
+  if(!logItem) return;
+  if(!confirm('Отменить эту операцию?')) return;
 
+  if(logItem.type === 'in') {
+    // Уменьшаем баланс резерва
+    state.reserve.balance -= logItem.amount;
+    
+    // Если операция была привязана к долгу, отнимаем из конверта
+    if(logItem.debtId) {
+      const d = state.debts.find(x => x.id === logItem.debtId);
+      if(d) d.reservedAmount = Math.max(0, (d.reservedAmount || 0) - logItem.amount);
+    }
+  } else if(logItem.type === 'out') {
+    // Если это был перевод на кредитку, отменять его нужно через историю платежей!
+    toast('Чтобы отменить перевод, зайдите в Историю платежей на вкладке Долги', 'err');
+    return;
+  }
+
+  state.reserve.log = state.reserve.log.filter(x => x.id !== id);
+  saveState(); renderAll();
+  toast('Операция отменена');
+}
 function addReserveIncome(){
   const active = state.debts.filter(d => d.current > 0 && !d.isDebit);
   
@@ -824,17 +847,14 @@ function addReserveIncome(){
         }
       }
 
-      state.reserve.log.push({
+            state.reserve.log.push({
         id: 'r_'+Date.now(),
         date: new Date().toISOString(),
         type: 'in',
         amount: amt,
+        debtId: data.debtId || null,
         note: (data.note || '') + (data.debtId ? ` (на ${state.debts.find(x=>x.id===data.debtId).name})` : '')
       });
-      saveState(); renderAll();
-      toast(`Резерв +${fmt(amt)}`);
-    }
-  });
 }
 function addReserveTransfer(){
       const active = state.debts.filter(d => d.current > 0);
