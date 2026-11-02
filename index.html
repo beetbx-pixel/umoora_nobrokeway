@@ -1644,6 +1644,19 @@ function renderStandup(){
   const checked = state.standup.openMics[weekKey] || [false,false,false,false];
   const done = checked.filter(Boolean).length;
   const pct = done/4*100;
+    const standupEvents = (state.oneTime || []).filter(o => o.type === 'standup');
+  const standupPhotosHtml = standupEvents.length ? standupEvents.map(evt => `
+    <div class="cal-item" style="margin-bottom:.4rem; padding:.5rem;">
+      <div class="cal-date c-statement" style="min-width:auto; padding:.3rem .6rem; font-size:.8rem">
+        ${new Date(evt.date).toLocaleDateString('ru-RU',{day:'numeric', month:'short'})}
+      </div>
+      <div class="cal-body">
+        <div class="cal-title">${esc(evt.name)}</div>
+        <div class="cal-sub">${new Date(evt.date).toLocaleTimeString('ru-RU',{hour:'2-digit', minute:'2-digit'})}</div>
+      </div>
+      <button class="btn ghost sm" onclick="deleteStandup('${evt.id}')">✕</button>
+    </div>
+  `).join('') : '<div class="muted small">Нет загруженных афиш.</div>';
 
   const checklist = [0,1,2,3].map(i=>`
     <label class="check">
@@ -1692,7 +1705,18 @@ function renderStandup(){
       <div class="progress" style="margin-top:.5rem"><div class="progress-fill" style="width:${Math.min(100,(state.standup.materialMinutes||0)/15*100)}%;background:var(--p4)"></div></div>
       <div class="muted small" style="margin-top:.4rem">Цель первого полугодия — 15 мин.</div>
     </div>
-
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.7rem">
+        <h3 style="margin:0">📸 Афиши выступлений</h3>
+        <button class="btn primary sm" onclick="openAddStandupModal()">+ Вручную</button>
+      </div>
+      <div class="drop-zone" id="standupDropZone" style="padding:.8rem;">
+        <div class="ico" style="font-size:1.5rem">📷</div>
+        <div class="t">Загрузить афишу</div>
+      </div>
+      <input type="file" id="standupFile" accept="image/*" hidden>
+      <div style="margin-top:.7rem">${standupPhotosHtml}</div>
+    </div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.7rem">
         <h3 style="margin:0">🎤 Мои шутки</h3>
@@ -1709,6 +1733,15 @@ function renderStandup(){
     </div>
   `;
 }
+    const sdz = document.getElementById('standupDropZone');
+  const sfi = document.getElementById('standupFile');
+  if(sdz && sfi){
+    sdz.onclick = () => sfi.click();
+    sfi.onchange = (e) => {
+      const file = e.target.files[0];
+      if(file) handleStandupPhoto(file);
+    };
+  }
 async function renderScreens(){
   const screens = state.screens.slice().reverse();
   const todayStr = new Date().toDateString();
