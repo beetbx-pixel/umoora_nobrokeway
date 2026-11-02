@@ -1742,6 +1742,109 @@ function renderStandup(){
       if(file) handleStandupPhoto(file);
     };
   }
+  function openAddStandupModal(dateVal = '', titleVal = '') {
+  openModal({
+    title: 'Новое выступление',
+    body: `
+      <label>Дата и время</label>
+      <input type="datetime-local" name="date" value="${dateVal}" required>
+      <label>Название / Место</label>
+      <input name="title" value="${titleVal}" placeholder="Например: Опен-мик в Stand-Up Club" required>
+    `,
+    submitText: 'Добавить в календарь',
+    onSubmit: data => {
+      if(!data.date || !data.title) return false;
+      
+      const evtDate = new Date(data.date);
+      if(isNaN(evtDate.getTime())) {
+        toast('Неверный формат даты', 'err');
+        return false;
+      }
+
+      if(!state.oneTime) state.oneTime = [];
+
+      state.oneTime.push({
+        id: 'evt_'+Date.now(),
+        name: '🎤 ' + data.title,
+        amount: 0,
+        date: evtDate.toISOString(),
+        type: 'standup'
+      });
+      
+      saveState(); 
+      renderStandup(); 
+      renderCalendar(); 
+      toast('Выступление добавлено ✅');
+    }
+  });
+}
+
+async function handleStandupPhoto(file) {
+  toast('⏳ Распознаю афишу... Подожди пару секунд.');
+  
+  try {
+    const { data: { text } } = await Tesseract.recognize(file, 'rus+eng');
+    console.log('Текст с афиши:', text);
+    
+    let foundDate = '';
+    const dateMatch = text.match(/(\d{1,2})[.\s](0?[1-9]|1[0-2])[.\s]?(\d{4})?/);
+    
+    if(dateMatch) {
+      const day = dateMatch[1].padStart(2, '0');
+      const month = dateMatch[2].padStart(2, '0');
+      const year = dateMatch[3] || new Date().getFullYear();
+      foundDate = `${year}-${month}-${day}T20:00`; 
+    }
+    
+    let foundTitle = '';
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 3);
+    if(lines.length > 0) {
+      foundTitle = lines[0].slice(0, 30);
+    }
+
+    openAddStandupModal(foundDate, foundTitle);
+    
+  } catch(e) {
+    console.error(e);
+    toast('Не удалось распознать, впиши вручную', 'err');
+    openAddStandupModal();
+  }
+}
+
+function deleteStandup(id) {
+  if(!confirm('Удалить это выступление?')) return;
+  state.oneTime = (state.oneTime || []).filter(o => o.id !== id);
+  saveState(); 
+  renderStandup(); 
+  renderCalendar();
+  toast('Удалено', 'err');
+}
+
+function openAddJokeModal(){
+  openModal({
+    title: 'Новая шутка',
+    body: `
+      <label>Краткий заголовок</label>
+      <input name="title" placeholder="Например: про грейс-период" required>
+      <label>Текст шутки</label>
+      <textarea name="text" placeholder="Вставить панчлайн..." required></textarea>
+      <label>Теги (через пробел)</label>
+      <input name="tags" placeholder="долги банк аня">
+    `,
+    submitText: 'Сохранить шутку',
+    onSubmit: data => {
+      if(!state.jokes) state.jokes = [];
+      state.jokes.push({
+        id: 'j_'+Date.now(),
+        title: data.title,
+        text: data.text,
+        tags: data.tags.split(/\s+/).filter(Boolean),
+        date: new Date().toISOString()
+      });
+      saveState(); renderStandup(); toast('Шутка записана ✅');
+    }
+  });
+}
 async function renderScreens(){
   const screens = state.screens.slice().reverse();
   const todayStr = new Date().toDateString();
